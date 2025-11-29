@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable } from '@/components/ui/data-table';
 import { TrustScoreBadge } from '@/components/users/TrustScoreBadge';
+import { UserLocationsCard } from '@/components/users/UserLocationsCard';
+import { UserDevicesCard } from '@/components/users/UserDevicesCard';
 import { SeverityBadge } from '@/components/violations/SeverityBadge';
 import { ActiveSessionBadge } from '@/components/sessions/ActiveSessionBadge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,7 +22,13 @@ import {
 import { formatDistanceToNow, format } from 'date-fns';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { Session, ViolationWithDetails } from '@tracearr/shared';
-import { useUser, useUserSessions, useViolations } from '@/hooks/queries';
+import {
+  useUser,
+  useUserSessions,
+  useViolations,
+  useUserLocations,
+  useUserDevices,
+} from '@/hooks/queries';
 
 const sessionColumns: ColumnDef<Session>[] = [
   {
@@ -141,11 +149,14 @@ export function UserDetail() {
     page: violationsPage,
     pageSize,
   });
+  const { data: locations, isLoading: locationsLoading } = useUserLocations(id!);
+  const { data: devices, isLoading: devicesLoading } = useUserDevices(id!);
 
   const sessions = sessionsData?.data ?? [];
   const sessionsTotalPages = sessionsData?.totalPages ?? 1;
   const violations = violationsData?.data ?? [];
   const violationsTotalPages = violationsData?.totalPages ?? 1;
+  const totalSessions = sessionsData?.total ?? 0;
 
   if (userLoading) {
     return (
@@ -295,6 +306,20 @@ export function UserDetail() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Locations and Devices */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <UserLocationsCard
+          locations={locations ?? []}
+          isLoading={locationsLoading}
+          totalSessions={totalSessions}
+        />
+        <UserDevicesCard
+          devices={devices ?? []}
+          isLoading={devicesLoading}
+          totalSessions={totalSessions}
+        />
       </div>
 
       {/* Recent Sessions */}
