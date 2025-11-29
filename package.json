@@ -15,6 +15,7 @@
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "test:watch": "turbo test:watch",
+    "test:coverage": "turbo test:coverage",
     "clean": "turbo clean && rm -rf node_modules"
   },
   "devDependencies": {
