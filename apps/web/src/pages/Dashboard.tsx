@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatsCardSkeleton, ListItemSkeleton } from '@/components/ui/skeleton';
 import { SeverityBadge } from '@/components/violations/SeverityBadge';
@@ -106,7 +107,10 @@ export function Dashboard() {
               <div className="space-y-4 max-h-64 overflow-y-auto">
                 {sessions.map((session) => (
                   <div key={session.id} className="flex items-center gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                    <Link
+                      to={`/users/${session.user.id}`}
+                      className="flex h-10 w-10 items-center justify-center rounded-full bg-muted hover:opacity-80 transition-opacity"
+                    >
                       {session.user.thumbUrl ? (
                         <img
                           src={session.user.thumbUrl}
@@ -116,9 +120,14 @@ export function Dashboard() {
                       ) : (
                         <User className="h-5 w-5 text-muted-foreground" />
                       )}
-                    </div>
+                    </Link>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{session.user.username}</p>
+                      <Link
+                        to={`/users/${session.user.id}`}
+                        className="font-medium truncate hover:underline"
+                      >
+                        {session.user.username}
+                      </Link>
                       <p className="text-sm text-muted-foreground truncate">
                         {session.mediaTitle}
                       </p>
@@ -164,7 +173,10 @@ export function Dashboard() {
               <div className="space-y-4 max-h-48 overflow-y-auto">
                 {violations.data.map((violation) => (
                   <div key={violation.id} className="flex items-center gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                    <Link
+                      to={`/users/${violation.userId}`}
+                      className="flex h-10 w-10 items-center justify-center rounded-full bg-muted hover:opacity-80 transition-opacity"
+                    >
                       {violation.user.thumbUrl ? (
                         <img
                           src={violation.user.thumbUrl}
@@ -174,9 +186,14 @@ export function Dashboard() {
                       ) : (
                         <User className="h-5 w-5 text-muted-foreground" />
                       )}
-                    </div>
+                    </Link>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{violation.user.username}</p>
+                      <Link
+                        to={`/users/${violation.userId}`}
+                        className="font-medium truncate hover:underline"
+                      >
+                        {violation.user.username}
+                      </Link>
                       <p className="text-sm text-muted-foreground truncate">
                         {violation.rule.name}
                       </p>
