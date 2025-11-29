@@ -129,12 +129,10 @@ export const sessionRoutes: FastifyPluginAsync = async (app) => {
 
       return {
         data: sessionData,
-        pagination: {
-          page,
-          pageSize,
-          total,
-          totalPages: Math.ceil(total / pageSize),
-        },
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
       };
     }
   );
