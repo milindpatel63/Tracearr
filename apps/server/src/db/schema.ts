@@ -140,7 +140,8 @@ export const sessions = pgTable(
     index('sessions_reference_idx').on(table.referenceId), // For session grouping queries
     index('sessions_user_rating_idx').on(table.userId, table.ratingKey), // For resume detection
     // Indexes for stats queries
-    index('sessions_geo_idx').on(table.geoLat, table.geoLon), // For /stats/locations
+    index('sessions_geo_idx').on(table.geoLat, table.geoLon), // For /stats/locations basic geo lookup
+    index('sessions_geo_time_idx').on(table.startedAt, table.geoLat, table.geoLon), // For time-filtered map queries
     index('sessions_media_type_idx').on(table.mediaType), // For media type aggregations
     index('sessions_transcode_idx').on(table.isTranscode), // For quality stats
     index('sessions_platform_idx').on(table.platform), // For platform stats
