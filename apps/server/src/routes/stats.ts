@@ -11,6 +11,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { sql, gte, desc, and, isNotNull } from 'drizzle-orm';
 import {
   statsQuerySchema,
+  locationStatsQuerySchema,
   REDIS_KEYS,
   type DashboardStats,
   type ActiveSession,
@@ -244,42 +245,90 @@ export const statsRoutes: FastifyPluginAsync = async (app) => {
   );
 
   /**
-   * GET /stats/locations - Geo data for stream map
+   * GET /stats/locations - Geo data for stream map with filtering
+   *
+   * Supports filtering by:
+   * - days: Number of days to look back (default: 30)
+   * - userId: Filter to specific user
+   * - serverId: Filter to specific server
+   * - mediaType: Filter by movie/episode/track
    */
   app.get(
     '/locations',
     { preHandler: [app.authenticate] },
     async (request, reply) => {
-      const query = statsQuerySchema.safeParse(request.query);
+      const query = locationStatsQuerySchema.safeParse(request.query);
       if (!query.success) {
         return reply.badRequest('Invalid query parameters');
       }
 
-      const { period } = query.data;
-      const startDate = getDateRange(period);
+      const { days, userId, serverId, mediaType } = query.data;
+      const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-      // Count unique plays per location
-      const locationStats = await db
-        .select({
-          city: sessions.geoCity,
-          country: sessions.geoCountry,
-          lat: sessions.geoLat,
-          lon: sessions.geoLon,
-          count: sql<number>`count(DISTINCT COALESCE(reference_id, id))::int`,
-        })
-        .from(sessions)
-        .where(
-          and(
-            gte(sessions.startedAt, startDate),
-            isNotNull(sessions.geoLat),
-            isNotNull(sessions.geoLon)
-          )
-        )
-        .groupBy(sessions.geoCity, sessions.geoCountry, sessions.geoLat, sessions.geoLon)
-        .orderBy(desc(sql`count(DISTINCT COALESCE(reference_id, id))`))
-        .limit(100);
+      // Build WHERE conditions dynamically
+      const conditions: ReturnType<typeof sql>[] = [
+        sql`started_at >= ${startDate}`,
+        sql`geo_lat IS NOT NULL`,
+        sql`geo_lon IS NOT NULL`,
+      ];
 
-      return { data: locationStats };
+      if (userId) {
+        conditions.push(sql`user_id = ${userId}`);
+      }
+      if (serverId) {
+        conditions.push(sql`server_id = ${serverId}`);
+      }
+      if (mediaType) {
+        conditions.push(sql`media_type = ${mediaType}`);
+      }
+
+      const whereClause = sql`WHERE ${sql.join(conditions, sql` AND `)}`;
+
+      // Count unique plays per location with filters
+      const result = await db.execute(sql`
+        SELECT
+          geo_city as city,
+          geo_country as country,
+          geo_lat as lat,
+          geo_lon as lon,
+          COUNT(DISTINCT COALESCE(reference_id, id))::int as count,
+          MAX(started_at) as last_activity
+        FROM sessions
+        ${whereClause}
+        GROUP BY geo_city, geo_country, geo_lat, geo_lon
+        ORDER BY count DESC
+        LIMIT 200
+      `);
+
+      const locationStats = (result.rows as {
+        city: string | null;
+        country: string | null;
+        lat: number;
+        lon: number;
+        count: number;
+        last_activity: Date;
+      }[]).map((row) => ({
+        city: row.city,
+        country: row.country,
+        lat: row.lat,
+        lon: row.lon,
+        count: row.count,
+        lastActivity: row.last_activity,
+      }));
+
+      // Calculate summary stats for the overlay card
+      const totalStreams = locationStats.reduce((sum, loc) => sum + loc.count, 0);
+      const uniqueLocations = locationStats.length;
+      const topCity = locationStats[0]?.city ?? null;
+
+      return {
+        data: locationStats,
+        summary: {
+          totalStreams,
+          uniqueLocations,
+          topCity,
+        },
+      };
     }
   );
 
