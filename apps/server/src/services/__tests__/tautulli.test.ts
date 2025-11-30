@@ -12,95 +12,17 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
 
-// ============================================================================
-// SCHEMA DEFINITIONS (copied from tautulli.ts for isolated testing)
-// ============================================================================
-
-const numberOrEmptyString = z.union([z.number(), z.literal('')]);
-
-const TautulliHistoryRecordSchema = z.object({
-  reference_id: z.number(),
-  row_id: z.number(),
-  date: z.number(),
-  started: z.number(),
-  stopped: z.number(),
-  duration: z.number(),
-  paused_counter: z.number(),
-  user_id: z.number(),
-  user: z.string(),
-  friendly_name: z.string(),
-  platform: z.string(),
-  product: z.string(),
-  player: z.string(),
-  ip_address: z.string(),
-  live: z.number(),
-  machine_id: z.string(),
-  location: z.string(),
-  secure: z.number(),
-  relayed: z.number(),
-  media_type: z.string(),
-  rating_key: numberOrEmptyString,
-  parent_rating_key: numberOrEmptyString,
-  grandparent_rating_key: numberOrEmptyString,
-  full_title: z.string(),
-  title: z.string(),
-  parent_title: z.string(),
-  grandparent_title: z.string(),
-  original_title: z.string(),
-  year: z.number(),
-  media_index: numberOrEmptyString,
-  parent_media_index: numberOrEmptyString,
-  thumb: z.string(),
-  originally_available_at: z.string(),
-  guid: z.string(),
-  transcode_decision: z.string(),
-  percent_complete: z.number(),
-  watched_status: z.number(),
-  group_count: z.number(),
-  group_ids: z.string(),
-  state: z.string().nullable(),
-  session_key: z.string().nullable(),
-});
-
-const TautulliHistoryResponseSchema = z.object({
-  response: z.object({
-    result: z.string(),
-    message: z.string().nullable(),
-    data: z.object({
-      recordsFiltered: z.number(),
-      recordsTotal: z.number(),
-      data: z.array(TautulliHistoryRecordSchema),
-      draw: z.number(),
-      filter_duration: z.string(),
-      total_duration: z.string(),
-    }),
-  }),
-});
-
-const TautulliUserRecordSchema = z.object({
-  user_id: z.number(),
-  username: z.string(),
-  friendly_name: z.string(),
-  email: z.string().nullable(),
-  thumb: z.string().nullable(),
-  is_home_user: z.number().nullable(),
-  is_admin: z.number(),
-  is_active: z.number(),
-  do_notify: z.number(),
-});
-
-const TautulliUsersResponseSchema = z.object({
-  response: z.object({
-    result: z.string(),
-    message: z.string().nullable(),
-    data: z.array(TautulliUserRecordSchema),
-  }),
-});
-
-type TautulliHistoryRecord = z.infer<typeof TautulliHistoryRecordSchema>;
-type TautulliUserRecord = z.infer<typeof TautulliUserRecordSchema>;
+// Import ACTUAL production schemas - not local duplicates
+// This ensures tests validate the same schemas used in production
+import {
+  TautulliHistoryRecordSchema,
+  TautulliHistoryResponseSchema,
+  TautulliUserRecordSchema,
+  TautulliUsersResponseSchema,
+  type TautulliHistoryRecord,
+  type TautulliUserRecord,
+} from '../tautulli.js';
 
 // ============================================================================
 // REAL API TEST DATA (captured from actual Tautulli instance)

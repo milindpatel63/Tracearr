@@ -17,10 +17,12 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000; // Base delay, will be multiplied by attempt number
 
 // Helper for fields that can be number or empty string (Tautulli API inconsistency)
-const numberOrEmptyString = z.union([z.number(), z.literal('')]);
+// Exported for testing
+export const numberOrEmptyString = z.union([z.number(), z.literal('')]);
 
 // Zod schemas for runtime validation of Tautulli API responses
-const TautulliHistoryRecordSchema = z.object({
+// Exported for testing
+export const TautulliHistoryRecordSchema = z.object({
   reference_id: z.number(), // API returns number, not string
   row_id: z.number(),
   date: z.number(),
@@ -66,7 +68,7 @@ const TautulliHistoryRecordSchema = z.object({
   session_key: z.string().nullable(),
 });
 
-const TautulliHistoryResponseSchema = z.object({
+export const TautulliHistoryResponseSchema = z.object({
   response: z.object({
     result: z.string(),
     message: z.string().nullable(),
@@ -81,7 +83,7 @@ const TautulliHistoryResponseSchema = z.object({
   }),
 });
 
-const TautulliUserRecordSchema = z.object({
+export const TautulliUserRecordSchema = z.object({
   user_id: z.number(),
   username: z.string(),
   friendly_name: z.string(),
@@ -93,7 +95,7 @@ const TautulliUserRecordSchema = z.object({
   do_notify: z.number(),
 });
 
-const TautulliUsersResponseSchema = z.object({
+export const TautulliUsersResponseSchema = z.object({
   response: z.object({
     result: z.string(),
     message: z.string().nullable(),
@@ -101,11 +103,11 @@ const TautulliUsersResponseSchema = z.object({
   }),
 });
 
-// Infer types from schemas
-type TautulliHistoryRecord = z.infer<typeof TautulliHistoryRecordSchema>;
-type TautulliHistoryResponse = z.infer<typeof TautulliHistoryResponseSchema>;
-type TautulliUserRecord = z.infer<typeof TautulliUserRecordSchema>;
-type TautulliUsersResponse = z.infer<typeof TautulliUsersResponseSchema>;
+// Infer types from schemas - exported for testing
+export type TautulliHistoryRecord = z.infer<typeof TautulliHistoryRecordSchema>;
+export type TautulliHistoryResponse = z.infer<typeof TautulliHistoryResponseSchema>;
+export type TautulliUserRecord = z.infer<typeof TautulliUserRecordSchema>;
+export type TautulliUsersResponse = z.infer<typeof TautulliUsersResponseSchema>;
 
 export class TautulliService {
   private baseUrl: string;
