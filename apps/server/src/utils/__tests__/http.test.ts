@@ -17,7 +17,7 @@
  * - Header helpers produce correct headers
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Import ACTUAL production functions - not local duplicates
 import {

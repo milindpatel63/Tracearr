@@ -8,7 +8,7 @@
  */
 
 import { eq, and, desc, isNull, gte } from 'drizzle-orm';
-import { POLLING_INTERVALS, TIME_MS, type ActiveSession, type SessionState } from '@tracearr/shared';
+import { POLLING_INTERVALS, TIME_MS, type ActiveSession, type SessionState, type Rule } from '@tracearr/shared';
 import { db } from '../../db/client.js';
 import { servers, users, sessions } from '../../db/schema.js';
 import { createMediaServerClient } from '../../services/mediaServer/index.js';
@@ -57,7 +57,7 @@ const defaultConfig: PollerConfig = {
  */
 async function processServerSessions(
   server: ServerWithToken,
-  activeRules: import('@tracearr/shared').Rule[],
+  activeRules: Rule[],
   cachedSessionKeys: Set<string>
 ): Promise<ServerProcessingResult> {
   const newSessions: ActiveSession[] = [];

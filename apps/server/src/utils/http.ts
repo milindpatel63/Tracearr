@@ -8,7 +8,7 @@
  * - Request timeout support
  */
 
-import { ExternalServiceError, ErrorCodes, type ErrorCode } from './errors.js';
+import { ExternalServiceError } from './errors.js';
 
 /**
  * HTTP client error with service context
@@ -114,7 +114,7 @@ export async function fetchJson<T>(
   url: string,
   options: HttpRequestOptions = {}
 ): Promise<T> {
-  const { timeout, service, includeBodyInError, ...fetchOptions } = options;
+  const { timeout, ...fetchOptions } = options;
 
   const response = await fetch(url, {
     ...fetchOptions,
@@ -138,7 +138,7 @@ export async function fetchText(
   url: string,
   options: HttpRequestOptions = {}
 ): Promise<string> {
-  const { timeout, service, includeBodyInError, ...fetchOptions } = options;
+  const { timeout, ...fetchOptions } = options;
 
   const response = await fetch(url, {
     ...fetchOptions,
@@ -164,7 +164,7 @@ export async function fetchRaw(
   url: string,
   options: HttpRequestOptions = {}
 ): Promise<Response> {
-  const { timeout, service, includeBodyInError, ...fetchOptions } = options;
+  const { timeout, ...fetchOptions } = options;
 
   const response = await fetch(url, {
     ...fetchOptions,
@@ -196,7 +196,7 @@ export async function fetchWithStatus<T>(
   headers: Headers;
   data: T | null;
 }> {
-  const { timeout, service, includeBodyInError, ...fetchOptions } = options;
+  const { timeout, ...fetchOptions } = options;
 
   const response = await fetch(url, {
     ...fetchOptions,

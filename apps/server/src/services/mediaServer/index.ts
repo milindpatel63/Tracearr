@@ -17,7 +17,6 @@
  * const users = await client.getUsers();
  */
 
-import type { ServerType } from '@tracearr/shared';
 import { PlexClient } from './plex/client.js';
 import { JellyfinClient } from './jellyfin/client.js';
 import type {
@@ -25,10 +24,6 @@ import type {
   IMediaServerClientWithHistory,
   MediaServerConfig,
   CreateClientOptions,
-  MediaSession,
-  MediaUser,
-  MediaLibrary,
-  MediaWatchHistoryItem,
 } from './types.js';
 
 // ============================================================================

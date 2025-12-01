@@ -39,7 +39,6 @@ import {
   ServiceUnavailableError,
   ExternalServiceError,
   ErrorCodes,
-  type ErrorCode,
 } from '../errors.js';
 
 describe('ErrorCodes', () => {
@@ -166,7 +165,7 @@ describe('ValidationError', () => {
   describe('fromZodError', () => {
     it('should convert Zod error to ValidationError', () => {
       const schema = z.object({
-        email: z.string().email(),
+        email: z.email(),
         age: z.number().min(18),
       });
 

@@ -11,7 +11,6 @@ import {
   parseBoolean,
   parseOptionalString,
   parseOptionalNumber,
-  parseArray,
   getNestedObject,
   getNestedValue,
   parseDateString,
@@ -120,7 +119,7 @@ function getPlayMethod(session: Record<string, unknown>): string {
  * Determine if stream is being transcoded
  * Uses PlayMethod from PlayState for accuracy, falls back to TranscodingInfo
  */
-function isTranscoding(session: Record<string, unknown>): boolean {
+function _isTranscoding(session: Record<string, unknown>): boolean {
   const playMethod = getPlayMethod(session);
   return playMethod === 'transcode';
 }

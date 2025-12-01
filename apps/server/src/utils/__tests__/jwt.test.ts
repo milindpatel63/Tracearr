@@ -12,7 +12,7 @@
  * - Missing JWT_SECRET handling
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import jwt from 'jsonwebtoken';
 
 // Import ACTUAL production functions and types - not local duplicates

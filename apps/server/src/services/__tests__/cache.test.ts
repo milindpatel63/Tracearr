@@ -92,8 +92,8 @@ function createMockRedis(): Redis & {
 
     // Pub/Sub
     publish: vi.fn(async () => 1),
-    subscribe: vi.fn(async () => {}),
-    unsubscribe: vi.fn(async () => {}),
+    subscribe: vi.fn(async () => undefined),
+    unsubscribe: vi.fn(async () => undefined),
     on: vi.fn((event: string, callback: (channel: string, message: string) => void) => {
       if (event === 'message') {
         messageCallbacks.push(callback);

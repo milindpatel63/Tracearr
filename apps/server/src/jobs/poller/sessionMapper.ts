@@ -10,7 +10,7 @@ import type { Session } from '@tracearr/shared';
 import type { MediaSession } from '../../services/mediaServer/types.js';
 import type { ProcessedSession } from './types.js';
 import { isPrivateIP, parseJellyfinClient } from './utils.js';
-import { sessions } from '../../db/schema.js';
+import type { sessions } from '../../db/schema.js';
 
 // ============================================================================
 // MediaSession → ProcessedSession Mapping

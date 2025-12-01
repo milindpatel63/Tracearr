@@ -16,14 +16,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-// Import ACTUAL production functions - not local duplicates
-import {
-  initializeEncryption,
-  isEncryptionInitialized,
-  encrypt,
-  decrypt,
-  generateEncryptionKey,
-} from '../crypto.js';
+// Import only what's used directly (other functions are dynamically imported per-test after vi.resetModules())
+import { generateEncryptionKey } from '../crypto.js';
 
 // Valid 32-byte key as 64 hex characters
 const VALID_KEY = 'a'.repeat(64);

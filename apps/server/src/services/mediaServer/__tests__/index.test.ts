@@ -5,7 +5,7 @@
  * and module exports.
  */
 
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 // Mock crypto module before imports
 vi.mock('../../../utils/crypto.js', () => ({

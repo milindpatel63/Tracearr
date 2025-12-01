@@ -371,7 +371,7 @@ describe('GeoIPService', () => {
     it('should respect custom max speed parameter', () => {
       // NYC to LA is ~3940 km
       const fourHoursMs = 4 * 60 * 60 * 1000;
-      const requiredSpeed = 3940 / 4; // ~985 km/h
+      // Required speed would be ~985 km/h (3940 / 4)
 
       // Default max speed is 900 km/h - should be impossible
       expect(service.isImpossibleTravel(newYork, losAngeles, fourHoursMs)).toBe(true);

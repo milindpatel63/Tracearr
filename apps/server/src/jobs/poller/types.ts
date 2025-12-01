@@ -5,7 +5,7 @@
  * Separated from implementation for clean imports and testing.
  */
 
-import type { Session, SessionState, Rule, RuleParams } from '@tracearr/shared';
+import type { Session, SessionState, Rule, RuleParams, ActiveSession } from '@tracearr/shared';
 
 // ============================================================================
 // Configuration Types
@@ -155,11 +155,11 @@ export interface SessionPauseData {
  */
 export interface ServerProcessingResult {
   /** Newly created sessions */
-  newSessions: import('@tracearr/shared').ActiveSession[];
+  newSessions: ActiveSession[];
   /** Session keys that stopped playing */
   stoppedSessionKeys: string[];
   /** Sessions that were updated (state change, progress, etc.) */
-  updatedSessions: import('@tracearr/shared').ActiveSession[];
+  updatedSessions: ActiveSession[];
 }
 
 // ============================================================================

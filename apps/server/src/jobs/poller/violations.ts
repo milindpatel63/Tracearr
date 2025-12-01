@@ -6,8 +6,8 @@
  */
 
 import { eq, sql } from 'drizzle-orm';
-import type { Rule, ViolationSeverity, ViolationWithDetails, WS_EVENTS } from '@tracearr/shared';
-import { WS_EVENTS as WS_EVENTS_CONST } from '@tracearr/shared';
+import type { Rule, ViolationSeverity, ViolationWithDetails } from '@tracearr/shared';
+import { WS_EVENTS } from '@tracearr/shared';
 import { db } from '../../db/client.js';
 import { users, violations } from '../../db/schema.js';
 import type { RuleEvaluationResult } from '../../services/rules.js';
@@ -153,7 +153,7 @@ export async function createViolation(
       },
     };
 
-    await pubSubService.publish(WS_EVENTS_CONST.VIOLATION_NEW, violationWithDetails);
+    await pubSubService.publish(WS_EVENTS.VIOLATION_NEW, violationWithDetails);
     console.log(`[Poller] Violation broadcast: ${rule.name} for user ${user.username}`);
   }
 }
