@@ -3,6 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+import { useEstimatedProgress } from '@/hooks/useEstimatedProgress';
 import type { ActiveSession } from '@tracearr/shared';
 
 interface NowPlayingCardProps {
@@ -73,16 +74,13 @@ function getMediaDisplay(session: ActiveSession): { title: string; subtitle: str
 export function NowPlayingCard({ session }: NowPlayingCardProps) {
   const { title, subtitle } = getMediaDisplay(session);
 
-  // Calculate progress percentage
-  const progress =
-    session.progressMs && session.totalDurationMs
-      ? Math.min((session.progressMs / session.totalDurationMs) * 100, 100)
-      : 0;
+  // Use estimated progress for smooth updates between SSE/poll events
+  const { estimatedProgressMs, progressPercent } = useEstimatedProgress(session);
 
-  // Time remaining
+  // Time remaining based on estimated progress
   const remaining =
-    session.totalDurationMs && session.progressMs
-      ? session.totalDurationMs - session.progressMs
+    session.totalDurationMs && estimatedProgressMs
+      ? session.totalDurationMs - estimatedProgressMs
       : null;
 
   // Build poster URL using image proxy
@@ -187,9 +185,9 @@ export function NowPlayingCard({ session }: NowPlayingCardProps) {
 
           {/* Bottom: Progress */}
           <div className="mt-3 space-y-1">
-            <Progress value={progress} className="h-1.5" />
+            <Progress value={progressPercent} className="h-1.5" />
             <div className="flex justify-between text-[10px] text-muted-foreground">
-              <span>{formatDuration(session.progressMs)}</span>
+              <span>{formatDuration(estimatedProgressMs)}</span>
               <span>
                 {isPaused ? (
                   <span className="font-medium text-yellow-500">Paused</span>
