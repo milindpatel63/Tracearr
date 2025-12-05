@@ -187,6 +187,7 @@ async function processNotificationJob(job: Job<NotificationJobData>): Promise<vo
     externalUrl: null,
     basePath: '',
     trustProxy: false,
+    mobileEnabled: settings.mobileEnabled ?? false,
   };
 
   switch (type) {

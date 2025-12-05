@@ -69,6 +69,7 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
         externalUrl: row.externalUrl,
         basePath: row.basePath,
         trustProxy: row.trustProxy,
+        mobileEnabled: row.mobileEnabled,
       };
 
       return result;
@@ -233,6 +234,7 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
         externalUrl: row.externalUrl,
         basePath: row.basePath,
         trustProxy: row.trustProxy,
+        mobileEnabled: row.mobileEnabled,
       };
 
       return result;
@@ -307,6 +309,7 @@ export interface NotificationSettings {
   discordWebhookUrl: string | null;
   customWebhookUrl: string | null;
   webhookSecret: string | null;
+  mobileEnabled: boolean;
 }
 
 /**
@@ -321,6 +324,7 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
       notifyOnServerDown: settings.notifyOnServerDown,
       discordWebhookUrl: settings.discordWebhookUrl,
       customWebhookUrl: settings.customWebhookUrl,
+      mobileEnabled: settings.mobileEnabled,
     })
     .from(settings)
     .where(eq(settings.id, SETTINGS_ID))
@@ -337,6 +341,7 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
       discordWebhookUrl: null,
       customWebhookUrl: null,
       webhookSecret: null,
+      mobileEnabled: false,
     };
   }
 
@@ -348,5 +353,6 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
     discordWebhookUrl: settingsRow.discordWebhookUrl,
     customWebhookUrl: settingsRow.customWebhookUrl,
     webhookSecret: null, // TODO: Add webhookSecret column to settings table in Phase 4
+    mobileEnabled: settingsRow.mobileEnabled,
   };
 }
