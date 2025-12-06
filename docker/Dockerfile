@@ -17,8 +17,8 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY . .
 
-# Build all packages
-RUN pnpm build
+# Build only production packages (excludes test-utils, mobile)
+RUN pnpm turbo run build --filter=@tracearr/shared --filter=@tracearr/server --filter=@tracearr/web
 
 # Production stage
 FROM node:22-alpine AS runner
