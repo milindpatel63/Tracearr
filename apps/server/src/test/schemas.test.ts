@@ -19,6 +19,7 @@ import {
   geoRestrictionParamsSchema,
   violationQuerySchema,
   violationIdParamSchema,
+  terminateSessionBodySchema,
 } from '@tracearr/shared';
 import { randomUUID } from 'node:crypto';
 
@@ -534,6 +535,51 @@ describe('Violation Schemas', () => {
     it('should reject invalid UUID', () => {
       const result = violationIdParamSchema.safeParse({ id: 'invalid' });
       expect(result.success).toBe(false);
+    });
+  });
+});
+
+describe('Session Termination Schemas', () => {
+  describe('terminateSessionBodySchema', () => {
+    it('should validate empty body (no reason)', () => {
+      const result = terminateSessionBodySchema.safeParse({});
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.reason).toBeUndefined();
+      }
+    });
+
+    it('should validate body with reason', () => {
+      const result = terminateSessionBodySchema.safeParse({
+        reason: 'Concurrent stream limit exceeded',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.reason).toBe('Concurrent stream limit exceeded');
+      }
+    });
+
+    it('should accept reason up to 500 characters', () => {
+      const longReason = 'a'.repeat(500);
+      const result = terminateSessionBodySchema.safeParse({
+        reason: longReason,
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject reason over 500 characters', () => {
+      const tooLongReason = 'a'.repeat(501);
+      const result = terminateSessionBodySchema.safeParse({
+        reason: tooLongReason,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should accept undefined reason', () => {
+      const result = terminateSessionBodySchema.safeParse({
+        reason: undefined,
+      });
+      expect(result.success).toBe(true);
     });
   });
 });
