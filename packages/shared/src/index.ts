@@ -87,7 +87,7 @@ export type {
   PlexStatusNotification,
   PlexTranscodeNotification,
   SSEConnectionStatus,
-} from './types';
+} from './types.js';
 
 // Schema exports
 export {
@@ -127,7 +127,7 @@ export {
   updateSettingsSchema,
   // Tautulli import
   tautulliImportSchema,
-} from './schemas';
+} from './schemas.js';
 
 // Schema input type exports
 export type {
@@ -144,7 +144,7 @@ export type {
   LocationStatsQueryInput,
   UpdateSettingsInput,
   TautulliImportInput,
-} from './schemas';
+} from './schemas.js';
 
 // Constant exports
 export {
@@ -170,7 +170,7 @@ export {
   SSE_CONFIG,
   PLEX_SSE_EVENTS,
   SSE_STATE,
-} from './constants';
+} from './constants.js';
 
 // Role helper exports
 export {
@@ -179,4 +179,4 @@ export {
   hasMinRole,
   isOwner,
   isActive,
-} from './types';
+} from './types.js';
