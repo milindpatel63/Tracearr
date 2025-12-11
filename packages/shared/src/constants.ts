@@ -120,7 +120,7 @@ export const POLLING_INTERVALS = {
   STATS_REFRESH: 60000,
   SERVER_HEALTH: 30000,
   // Reconciliation interval when SSE is active (fallback check)
-  SSE_RECONCILIATION: 5 * 60 * 1000, // 5 minutes
+  SSE_RECONCILIATION: 30 * 1000, // 30 seconds
 } as const;
 
 // SSE (Server-Sent Events) configuration
@@ -130,8 +130,9 @@ export const SSE_CONFIG = {
   MAX_RETRY_DELAY_MS: 30000,
   RETRY_MULTIPLIER: 2,
   MAX_RETRIES: 10,
-  // Heartbeat/keepalive
-  HEARTBEAT_TIMEOUT_MS: 300000, // 5 minutes - matches reconciliation interval
+  // Heartbeat/keepalive - how long without events before assuming connection died
+  // Plex sends ping events every 10 seconds, so 30s = miss 3 pings = dead
+  HEARTBEAT_TIMEOUT_MS: 30000, // 30 seconds
   // When to fall back to polling
   FALLBACK_THRESHOLD: 5, // consecutive failures before fallback
 } as const;
