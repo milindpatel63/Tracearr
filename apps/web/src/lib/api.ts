@@ -22,7 +22,13 @@ import type {
   PaginatedResponse,
   MobileConfig,
   TerminationLogWithDetails,
+  PlexDiscoveredServer,
+  PlexDiscoveredConnection,
+  PlexAvailableServersResponse,
 } from '@tracearr/shared';
+
+// Re-export shared types needed by frontend components
+export type { PlexDiscoveredServer, PlexDiscoveredConnection, PlexAvailableServersResponse };
 import { API_BASE_PATH } from '@tracearr/shared';
 
 // Stats time range parameters
@@ -32,7 +38,7 @@ export interface StatsTimeRange {
   endDate?: string; // ISO date string
 }
 
-// Types for Plex server selection
+// Types for Plex server selection during signup (from check-pin endpoint)
 export interface PlexServerConnection {
   uri: string;
   local: boolean;
@@ -44,6 +50,7 @@ export interface PlexServerInfo {
   name: string;
   platform: string;
   version: string;
+  clientIdentifier: string;
   connections: PlexServerConnection[];
 }
 
@@ -268,8 +275,19 @@ class ApiClient {
       }),
 
     // Plex OAuth - Step 3: Connect with selected server (only for setup)
-    connectPlexServer: (data: { tempToken: string; serverUri: string; serverName: string }) =>
+    connectPlexServer: (data: { tempToken: string; serverUri: string; serverName: string; clientIdentifier?: string }) =>
       this.request<{ accessToken: string; refreshToken: string; user: User }>('/auth/plex/connect', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    // Get available Plex servers (authenticated - for adding additional servers)
+    getAvailablePlexServers: () =>
+      this.request<PlexAvailableServersResponse>('/auth/plex/available-servers'),
+
+    // Add an additional Plex server (authenticated - owner only)
+    addPlexServer: (data: { serverUri: string; serverName: string; clientIdentifier: string }) =>
+      this.request<{ server: Server; usersAdded: number; librariesSynced: number }>('/auth/plex/add-server', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
