@@ -174,6 +174,18 @@ chown -R tracearr:tracearr /data/tracearr
 chown -R tracearr:tracearr /app
 
 # =============================================================================
+# Tune PostgreSQL for available resources (runs every startup)
+# =============================================================================
+# timescaledb-tune automatically optimizes PostgreSQL settings based on
+# available RAM and CPU. Safe to run repeatedly - recalculates if resources change.
+if command -v timescaledb-tune &> /dev/null; then
+    log "Tuning PostgreSQL for available resources..."
+    timescaledb-tune --pg-config=/usr/lib/postgresql/15/bin/pg_config \
+        --conf-path=/data/postgres/postgresql.conf \
+        --yes --quiet 2>/dev/null || warn "timescaledb-tune failed (non-fatal)"
+fi
+
+# =============================================================================
 # Link GeoIP database if exists
 # =============================================================================
 if [ -f /data/tracearr/GeoLite2-City.mmdb ]; then

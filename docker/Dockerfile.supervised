@@ -58,6 +58,7 @@ RUN curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmo
     && apt-get install -y --no-install-recommends \
         postgresql-15 \
         timescaledb-2-postgresql-15 \
+        timescaledb-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Redis
