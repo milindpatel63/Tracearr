@@ -206,7 +206,7 @@ export function SessionDetailSheet({ session, open, onOpenChange }: Props) {
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-md">
         <SheetHeader className="pb-4">
-          <SheetTitle className="flex items-center gap-2 text-base">
+          <SheetTitle className="flex items-center gap-2 text-base pr-8">
             <stateConfig.icon className={cn('h-4 w-4', stateConfig.color)} />
             Session Details
             <Badge

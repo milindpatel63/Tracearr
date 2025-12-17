@@ -31,12 +31,16 @@ const PRESETS: { value: TimeRangePeriod; label: string }[] = [
 
 export function TimeRangePicker({ value, onChange, className }: TimeRangePickerProps) {
   const [isOpen, setIsOpen] = React.useState(false);
-  const [tempRange, setTempRange] = React.useState<DateRange | undefined>(() => {
-    if (value.startDate && value.endDate) {
-      return { from: value.startDate, to: value.endDate };
+  const [tempRange, setTempRange] = React.useState<DateRange | undefined>(undefined);
+
+  // Sync tempRange when popover opens or value changes
+  React.useEffect(() => {
+    if (isOpen && value.startDate && value.endDate) {
+      setTempRange({ from: value.startDate, to: value.endDate });
+    } else if (isOpen && !value.startDate && !value.endDate) {
+      setTempRange(undefined);
     }
-    return undefined;
-  });
+  }, [isOpen, value.startDate, value.endDate]);
 
   const handlePresetClick = (period: TimeRangePeriod) => {
     onChange({ period, startDate: undefined, endDate: undefined });
