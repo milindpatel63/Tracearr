@@ -40,7 +40,7 @@ export const TautulliHistoryRecordSchema = z.object({
   // User info (coerce handles string/number inconsistency across Tautulli versions)
   user_id: z.coerce.number(),
   user: z.string(),
-  friendly_name: z.string(),
+  friendly_name: z.string().nullable(),
   user_thumb: z.string(), // User avatar URL
 
   // Player/client info
@@ -106,7 +106,7 @@ export const TautulliHistoryResponseSchema = z.object({
 export const TautulliUserRecordSchema = z.object({
   user_id: z.coerce.number(),
   username: z.string(),
-  friendly_name: z.string(),
+  friendly_name: z.string().nullable(),
   email: z.string().nullable(), // Can be null for local users
   thumb: z.string().nullable(), // Can be null for local users
   is_home_user: z.number().nullable(), // Can be null for local users
