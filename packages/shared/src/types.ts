@@ -531,6 +531,8 @@ export interface ServerToClientEvents {
   'stats:updated': (stats: DashboardStats) => void;
   'import:progress': (progress: TautulliImportProgress) => void;
   'version:update': (data: { current: string; latest: string; releaseUrl: string }) => void;
+  'server:down': (data: { serverId: string; serverName: string }) => void;
+  'server:up': (data: { serverId: string; serverName: string }) => void;
 }
 
 export interface ClientToServerEvents {

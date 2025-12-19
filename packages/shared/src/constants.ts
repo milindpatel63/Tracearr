@@ -59,6 +59,8 @@ export const WS_EVENTS = {
   SUBSCRIBE_SESSIONS: 'subscribe:sessions',
   UNSUBSCRIBE_SESSIONS: 'unsubscribe:sessions',
   VERSION_UPDATE: 'version:update',
+  SERVER_DOWN: 'server:down',
+  SERVER_UP: 'server:up',
 } as const;
 
 // Redis key prefixes
