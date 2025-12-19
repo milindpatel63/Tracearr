@@ -450,7 +450,8 @@ async function processServerSessions(
           overrides: {
             state: newState,
             lastPausedAt: updatePayload.lastPausedAt ?? existingSession.lastPausedAt,
-            pausedDurationMs: updatePayload.pausedDurationMs ?? existingSession.pausedDurationMs ?? 0,
+            pausedDurationMs:
+              updatePayload.pausedDurationMs ?? existingSession.pausedDurationMs ?? 0,
             watched: updatePayload.watched ?? existingSession.watched ?? false,
           },
         });

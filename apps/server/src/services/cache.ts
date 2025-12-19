@@ -567,4 +567,3 @@ export async function atomicMultiUpdate(
 
   await pipeline.exec();
 }
-

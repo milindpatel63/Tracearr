@@ -392,10 +392,7 @@ describe('Concurrent access handling', () => {
     };
 
     // Simulate concurrent stop attempts
-    const [result1, result2] = await Promise.all([
-      tryStopSession('poller'),
-      tryStopSession('sse'),
-    ]);
+    const [result1, result2] = await Promise.all([tryStopSession('poller'), tryStopSession('sse')]);
 
     // Both attempted
     expect(stopAttempts.length).toBe(2);

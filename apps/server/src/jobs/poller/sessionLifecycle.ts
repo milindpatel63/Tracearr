@@ -142,12 +142,12 @@ export function buildActiveSession(input: BuildActiveSessionInput): ActiveSessio
     progressMs: processed.progressMs || null,
 
     // Pause tracking (can be overridden for updates)
-    lastPausedAt: overrides?.lastPausedAt !== undefined
-      ? overrides.lastPausedAt
-      : session.lastPausedAt,
-    pausedDurationMs: overrides?.pausedDurationMs !== undefined
-      ? overrides.pausedDurationMs
-      : session.pausedDurationMs ?? 0,
+    lastPausedAt:
+      overrides?.lastPausedAt !== undefined ? overrides.lastPausedAt : session.lastPausedAt,
+    pausedDurationMs:
+      overrides?.pausedDurationMs !== undefined
+        ? overrides.pausedDurationMs
+        : (session.pausedDurationMs ?? 0),
 
     // Resume tracking
     referenceId: session.referenceId,
@@ -426,9 +426,7 @@ export async function createSessionWithRulesAtomic(
     const createdViolations: ViolationInsertResult[] = [];
     for (const result of ruleResults) {
       if (result.violated) {
-        const matchingRule = activeRules.find((r: Rule) =>
-          doesRuleApplyToUser(r, serverUser.id)
-        );
+        const matchingRule = activeRules.find((r: Rule) => doesRuleApplyToUser(r, serverUser.id));
         if (matchingRule) {
           const relatedSessionIds = (result.data?.relatedSessionIds as string[]) || [];
           const isDuplicate = await isDuplicateViolation(
@@ -597,7 +595,11 @@ export async function processPollResults(input: PollResultsInput): Promise<void>
   // Update cache incrementally
   if (cacheService) {
     // Incremental sync: adds new, removes stopped, updates existing
-    await cacheService.incrementalSyncActiveSessions(newSessions, stoppedSessionIds, updatedSessions);
+    await cacheService.incrementalSyncActiveSessions(
+      newSessions,
+      stoppedSessionIds,
+      updatedSessions
+    );
 
     // Update user session sets for new sessions
     for (const session of newSessions) {
