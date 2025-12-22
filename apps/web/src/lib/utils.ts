@@ -12,5 +12,7 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function getCountryName(code: string | null | undefined): string | null {
   if (!code) return null;
-  return getCountryNameFromCode(code) ?? code;
+  const name = getCountryNameFromCode(code) ?? code;
+  // Strip ISO 3166-1 article suffixes like "(the)", "(The)"
+  return name.replace(/\s*\([Tt]he\)$/, '');
 }
