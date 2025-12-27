@@ -709,20 +709,65 @@ function NotificationSettings() {
   const updateSettings = useUpdateSettings();
   const [webhookFormat, setWebhookFormat] = useState<string>('json');
   const [ntfyTopic, setNtfyTopic] = useState<string>('');
+  const [ntfyAuthToken, setNtfyAuthToken] = useState<string>('');
+  const [testingDiscord, setTestingDiscord] = useState(false);
+  const [testingCustom, setTestingCustom] = useState(false);
 
   // Sync state with loaded settings
   useEffect(() => {
     if (settings) {
       setWebhookFormat(settings.webhookFormat ?? 'json');
       setNtfyTopic(settings.ntfyTopic ?? '');
+      // Don't sync auth token from server (it's masked with ********)
     }
   }, [settings]);
 
   const handleUrlChange = (
-    key: 'discordWebhookUrl' | 'customWebhookUrl' | 'ntfyTopic',
+    key: 'discordWebhookUrl' | 'customWebhookUrl' | 'ntfyTopic' | 'ntfyAuthToken',
     value: string
   ) => {
     updateSettings.mutate({ [key]: value || null });
+  };
+
+  const handleTestDiscord = async () => {
+    setTestingDiscord(true);
+    try {
+      const result = await api.settings.testWebhook({ type: 'discord' });
+      if (result.success) {
+        toast.success('Test Successful', { description: 'Discord webhook is working correctly' });
+      } else {
+        toast.error('Test Failed', { description: result.error ?? 'Unknown error' });
+      }
+    } catch (err) {
+      toast.error('Test Failed', {
+        description: err instanceof Error ? err.message : 'Failed to send test',
+      });
+    } finally {
+      setTestingDiscord(false);
+    }
+  };
+
+  const handleTestCustom = async () => {
+    setTestingCustom(true);
+    try {
+      const result = await api.settings.testWebhook({
+        type: 'custom',
+        format: webhookFormat as 'json' | 'ntfy' | 'apprise',
+        ntfyTopic: ntfyTopic || undefined,
+        ntfyAuthToken: ntfyAuthToken || undefined,
+      });
+      if (result.success) {
+        toast.success('Test Successful', { description: 'Custom webhook is working correctly' });
+      } else {
+        toast.error('Test Failed', { description: result.error ?? 'Unknown error' });
+      }
+    } catch (err) {
+      toast.error('Test Failed', {
+        description: err instanceof Error ? err.message : 'Failed to send test',
+      });
+    } finally {
+      setTestingCustom(false);
+    }
   };
 
   const handleWebhookFormatChange = (value: string) => {
@@ -774,14 +819,23 @@ function NotificationSettings() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="discordWebhook">Discord Webhook URL</Label>
-            <Input
-              id="discordWebhook"
-              placeholder="https://discord.com/api/webhooks/..."
-              defaultValue={settings?.discordWebhookUrl ?? ''}
-              onBlur={(e) => {
-                handleUrlChange('discordWebhookUrl', e.target.value);
-              }}
-            />
+            <div className="flex gap-2">
+              <Input
+                id="discordWebhook"
+                placeholder="https://discord.com/api/webhooks/..."
+                defaultValue={settings?.discordWebhookUrl ?? ''}
+                onBlur={(e) => {
+                  handleUrlChange('discordWebhookUrl', e.target.value);
+                }}
+              />
+              <Button
+                variant="outline"
+                onClick={handleTestDiscord}
+                disabled={!settings?.discordWebhookUrl || testingDiscord}
+              >
+                {testingDiscord ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Test'}
+              </Button>
+            </div>
             <p className="text-muted-foreground text-xs">
               Paste your Discord webhook URL to receive notifications in a Discord channel
             </p>
@@ -830,21 +884,60 @@ function NotificationSettings() {
           </div>
 
           {webhookFormat === 'ntfy' && (
-            <div className="space-y-2">
-              <Label htmlFor="ntfyTopic">Ntfy Topic</Label>
-              <Input
-                id="ntfyTopic"
-                placeholder="tracearr"
-                value={ntfyTopic}
-                onChange={(e) => setNtfyTopic(e.target.value)}
-                onBlur={(e) => {
-                  handleUrlChange('ntfyTopic', e.target.value);
-                }}
-              />
-              <p className="text-muted-foreground text-xs">
-                The ntfy topic to publish notifications to
-              </p>
-            </div>
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="ntfyTopic">Ntfy Topic</Label>
+                <Input
+                  id="ntfyTopic"
+                  placeholder="tracearr"
+                  value={ntfyTopic}
+                  onChange={(e) => setNtfyTopic(e.target.value)}
+                  onBlur={(e) => {
+                    handleUrlChange('ntfyTopic', e.target.value);
+                  }}
+                />
+                <p className="text-muted-foreground text-xs">
+                  The ntfy topic to publish notifications to
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="ntfyAuthToken">Ntfy Auth Token (Optional)</Label>
+                <Input
+                  id="ntfyAuthToken"
+                  type="password"
+                  placeholder={settings?.ntfyAuthToken ? '••••••••' : 'Enter auth token'}
+                  value={ntfyAuthToken}
+                  onChange={(e) => setNtfyAuthToken(e.target.value)}
+                  onBlur={(e) => {
+                    if (e.target.value) {
+                      handleUrlChange('ntfyAuthToken', e.target.value);
+                    }
+                  }}
+                />
+                <p className="text-muted-foreground text-xs">
+                  Required if your ntfy server uses access control. Leave empty for public topics.
+                </p>
+              </div>
+            </>
+          )}
+
+          {settings?.customWebhookUrl && (
+            <Button
+              variant="outline"
+              onClick={handleTestCustom}
+              disabled={testingCustom}
+              className="w-full"
+            >
+              {testingCustom ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Testing...
+                </>
+              ) : (
+                'Test Custom Webhook'
+              )}
+            </Button>
           )}
         </CardContent>
       </Card>
@@ -2252,7 +2345,7 @@ function JellystatImportSection({
         <div className="ml-8 space-y-4">
           <FileDropzone
             accept=".json"
-            maxSize={100 * 1024 * 1024}
+            maxSize={500 * 1024 * 1024}
             onFileSelect={handleFileSelect}
             selectedFile={selectedFile}
             disabled={isJellystatImporting}
