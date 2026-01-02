@@ -1,9 +1,12 @@
 /**
  * Play Statistics Routes
  *
- * GET /plays - Plays over time
+ * GET /plays - Plays over time (engagement-based, >= 2 min sessions)
  * GET /plays-by-dayofweek - Plays grouped by day of week
  * GET /plays-by-hourofday - Plays grouped by hour of day
+ *
+ * All endpoints use engagement-based counting which filters out
+ * sessions shorter than 2 minutes (Netflix-style "intent" threshold).
  */
 
 import type { FastifyPluginAsync } from 'fastify';
@@ -13,10 +16,44 @@ import { db } from '../../db/client.js';
 import { resolveDateRange } from './utils.js';
 import { validateServerAccess } from '../../utils/serverFiltering.js';
 
+// UUID validation regex for defensive checks
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Minimum session duration for a "valid" play (2 minutes in milliseconds)
+const MIN_PLAY_DURATION_MS = 120000;
+
 /**
- * Build SQL server filter fragment for raw queries
+ * Build SQL server filter fragment for engagement view queries.
+ * Uses UUID casting since engagement view has uuid type for server_id.
  */
-function buildServerFilterSql(
+function buildEngagementServerFilter(
+  serverId: string | undefined,
+  authUser: { role: string; serverIds: string[] }
+): ReturnType<typeof sql> {
+  if (serverId) {
+    if (!UUID_REGEX.test(serverId)) {
+      return sql`AND false`;
+    }
+    return sql`AND server_id = ${serverId}::uuid`;
+  }
+  if (authUser.role !== 'owner') {
+    const validServerIds = authUser.serverIds.filter((id) => UUID_REGEX.test(id));
+    if (validServerIds.length === 0) {
+      return sql`AND false`;
+    } else if (validServerIds.length === 1) {
+      return sql`AND server_id = ${validServerIds[0]}::uuid`;
+    } else {
+      const serverIdList = validServerIds.map((id) => sql`${id}::uuid`);
+      return sql`AND server_id IN (${sql.join(serverIdList, sql`, `)})`;
+    }
+  }
+  return sql``;
+}
+
+/**
+ * Build SQL server filter fragment for sessions table queries.
+ */
+function buildSessionServerFilter(
   serverId: string | undefined,
   authUser: { role: string; serverIds: string[] }
 ): ReturnType<typeof sql> {
@@ -38,7 +75,11 @@ function buildServerFilterSql(
 
 export const playsRoutes: FastifyPluginAsync = async (app) => {
   /**
-   * GET /plays - Plays over time
+   * GET /plays - Plays over time (engagement-based)
+   *
+   * Returns validated plays (sessions >= 2 min) grouped by day.
+   * Uses the daily_content_engagement view for consistent counting
+   * with the dashboard stats.
    */
   app.get('/plays', { preHandler: [app.authenticate] }, async (request, reply) => {
     const query = statsQuerySchema.safeParse(request.query);
@@ -46,11 +87,9 @@ export const playsRoutes: FastifyPluginAsync = async (app) => {
       return reply.badRequest('Invalid query parameters');
     }
 
-    const { period, startDate, endDate, serverId, timezone } = query.data;
+    const { period, startDate, endDate, serverId } = query.data;
     const authUser = request.user;
     const dateRange = resolveDateRange(period, startDate, endDate);
-    // Default to UTC for backwards compatibility
-    const tz = timezone ?? 'UTC';
 
     // Validate server access if specific server requested
     if (serverId) {
@@ -60,32 +99,38 @@ export const playsRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const serverFilter = buildServerFilterSql(serverId, authUser);
+    const serverFilter = buildEngagementServerFilter(serverId, authUser);
 
-    // For all-time queries, we need a base WHERE clause
-    const baseWhere = dateRange.start
-      ? sql`WHERE started_at >= ${dateRange.start}`
+    // Build date filter for the engagement view (day column is UTC-bucketed)
+    const dateFilter = dateRange.start
+      ? sql`WHERE day >= date_trunc('day', ${dateRange.start}::timestamptz)`
       : sql`WHERE true`;
+    const endDateFilter =
+      period === 'custom' && dateRange.end
+        ? sql`AND day < date_trunc('day', ${dateRange.end}::timestamptz) + interval '1 day'`
+        : sql``;
 
-    // Convert to user's timezone before truncating to day
-    // Use ::text (not ::date::text) so JS parses as local time, not UTC
+    // Query engagement view for validated plays per day
     const result = await db.execute(sql`
         SELECT
-          date_trunc('day', started_at AT TIME ZONE ${tz})::text as date,
-          count(DISTINCT COALESCE(reference_id, id))::int as count
-        FROM sessions
-        ${baseWhere}
-        ${period === 'custom' ? sql`AND started_at < ${dateRange.end}` : sql``}
+          day::date::text as date,
+          COALESCE(SUM(valid_session_count), 0)::int as count
+        FROM daily_content_engagement
+        ${dateFilter}
+        ${endDateFilter}
         ${serverFilter}
-        GROUP BY 1
-        ORDER BY 1
+        GROUP BY day
+        ORDER BY day
       `);
 
     return { data: result.rows as { date: string; count: number }[] };
   });
 
   /**
-   * GET /plays-by-dayofweek - Plays grouped by day of week
+   * GET /plays-by-dayofweek - Plays grouped by day of week (engagement-based)
+   *
+   * Returns validated plays (sessions >= 2 min) grouped by day of week.
+   * Uses the daily_content_engagement view for consistent counting.
    */
   app.get('/plays-by-dayofweek', { preHandler: [app.authenticate] }, async (request, reply) => {
     const query = statsQuerySchema.safeParse(request.query);
@@ -108,21 +153,25 @@ export const playsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const serverFilter = buildServerFilterSql(serverId, authUser);
+    const serverFilter = buildEngagementServerFilter(serverId, authUser);
 
-    // For all-time queries, we need a base WHERE clause
-    const baseWhere = dateRange.start
-      ? sql`WHERE started_at >= ${dateRange.start}`
+    // Build date filter for the engagement view
+    const dateFilter = dateRange.start
+      ? sql`WHERE day >= date_trunc('day', ${dateRange.start}::timestamptz)`
       : sql`WHERE true`;
+    const endDateFilter =
+      period === 'custom' && dateRange.end
+        ? sql`AND day < date_trunc('day', ${dateRange.end}::timestamptz) + interval '1 day'`
+        : sql``;
 
-    // Convert to user's timezone before extracting day of week
+    // Query engagement view, extracting day of week from the day column
     const result = await db.execute(sql`
         SELECT
-          EXTRACT(DOW FROM started_at AT TIME ZONE ${tz})::int as day,
-          COUNT(DISTINCT COALESCE(reference_id, id))::int as count
-        FROM sessions
-        ${baseWhere}
-        ${period === 'custom' ? sql`AND started_at < ${dateRange.end}` : sql``}
+          EXTRACT(DOW FROM day AT TIME ZONE ${tz})::int as day,
+          COALESCE(SUM(valid_session_count), 0)::int as count
+        FROM daily_content_engagement
+        ${dateFilter}
+        ${endDateFilter}
         ${serverFilter}
         GROUP BY 1
         ORDER BY 1
@@ -142,7 +191,11 @@ export const playsRoutes: FastifyPluginAsync = async (app) => {
   });
 
   /**
-   * GET /plays-by-hourofday - Plays grouped by hour of day
+   * GET /plays-by-hourofday - Plays grouped by hour of day (engagement-based)
+   *
+   * Returns validated plays (sessions >= 2 min) grouped by hour of day.
+   * Queries sessions table directly with duration filter since engagement
+   * view only has daily granularity.
    */
   app.get('/plays-by-hourofday', { preHandler: [app.authenticate] }, async (request, reply) => {
     const query = statsQuerySchema.safeParse(request.query);
@@ -164,12 +217,13 @@ export const playsRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const serverFilter = buildServerFilterSql(serverId, authUser);
+    const serverFilter = buildSessionServerFilter(serverId, authUser);
 
     // For all-time queries, we need a base WHERE clause
+    // Include duration filter for engagement-based counting
     const baseWhere = dateRange.start
-      ? sql`WHERE started_at >= ${dateRange.start}`
-      : sql`WHERE true`;
+      ? sql`WHERE started_at >= ${dateRange.start} AND duration_ms >= ${MIN_PLAY_DURATION_MS}`
+      : sql`WHERE duration_ms >= ${MIN_PLAY_DURATION_MS}`;
 
     // Convert to user's timezone before extracting hour
     const result = await db.execute(sql`
