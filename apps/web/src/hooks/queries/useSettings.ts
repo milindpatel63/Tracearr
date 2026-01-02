@@ -11,13 +11,17 @@ export function useSettings() {
   });
 }
 
-export function useUpdateSettings() {
+interface UpdateSettingsOptions {
+  silent?: boolean;
+}
+
+export function useUpdateSettings(options: UpdateSettingsOptions = {}) {
+  const { silent = false } = options;
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (data: Partial<Settings>) => api.settings.update(data),
     onMutate: async (newSettings) => {
-      // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['settings'] });
 
       // Snapshot the previous value
@@ -36,11 +40,15 @@ export function useUpdateSettings() {
       if (context?.previousSettings) {
         queryClient.setQueryData(['settings'], context.previousSettings);
       }
-      toast.error('Failed to Update Settings', { description: err.message });
+      if (!silent) {
+        toast.error('Failed to Update Settings', { description: err.message });
+      }
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['settings'] });
-      toast.success('Settings Updated', { description: 'Your settings have been saved.' });
+      if (!silent) {
+        toast.success('Settings Updated', { description: 'Your settings have been saved.' });
+      }
     },
   });
 }

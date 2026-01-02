@@ -61,6 +61,7 @@ import { AppearanceSettings } from '@/components/settings/AppearanceSettings';
 import { JobsSettings } from '@/components/settings/JobsSettings';
 import { PlexAccountsManager } from '@/components/settings/PlexAccountsManager';
 import { ImportProgressCard, FileDropzone, type ImportProgressData } from '@/components/import';
+import { useDebouncedSave } from '@/hooks/useDebouncedSave';
 import type {
   Server,
   Settings as SettingsType,
@@ -121,13 +122,16 @@ function GeneralSettings() {
   const { data: settings, isLoading } = useSettings();
   const updateSettings = useUpdateSettings();
 
-  const handleTogglePoller = (enabled: boolean) => {
-    updateSettings.mutate({ pollerEnabled: enabled });
-  };
+  const pollerIntervalField = useDebouncedSave('pollerIntervalMs', settings?.pollerIntervalMs);
+  const intervalSeconds = Math.round((pollerIntervalField.value ?? 15000) / 1000);
 
   const handleIntervalChange = (seconds: number) => {
-    const ms = Math.max(5, Math.min(300, seconds)) * 1000;
-    updateSettings.mutate({ pollerIntervalMs: ms });
+    const clamped = Math.max(5, Math.min(300, seconds));
+    pollerIntervalField.setValue(clamped * 1000);
+  };
+
+  const handleTogglePoller = (enabled: boolean) => {
+    updateSettings.mutate({ pollerEnabled: enabled });
   };
 
   const handleUnitSystemChange = (value: 'metric' | 'imperial') => {
@@ -148,8 +152,6 @@ function GeneralSettings() {
       </Card>
     );
   }
-
-  const intervalSeconds = Math.round((settings?.pollerIntervalMs ?? 15000) / 1000);
 
   return (
     <Card>
@@ -197,10 +199,8 @@ function GeneralSettings() {
               min={5}
               max={300}
               className="w-20"
-              defaultValue={intervalSeconds}
-              onBlur={(e) => {
-                handleIntervalChange(parseInt(e.target.value, 10) || 15);
-              }}
+              value={intervalSeconds}
+              onChange={(e) => handleIntervalChange(parseInt(e.target.value, 10) || 15)}
               disabled={!settings?.pollerEnabled}
             />
             <span className="text-muted-foreground text-sm">sec</span>
@@ -851,26 +851,21 @@ function NotificationSettings() {
   const { data: settings, isLoading } = useSettings();
   const updateSettings = useUpdateSettings();
   const [webhookFormat, setWebhookFormat] = useState<string>('json');
-  const [ntfyTopic, setNtfyTopic] = useState<string>('');
-  const [ntfyAuthToken, setNtfyAuthToken] = useState<string>('');
   const [testingDiscord, setTestingDiscord] = useState(false);
   const [testingCustom, setTestingCustom] = useState(false);
 
-  // Sync state with loaded settings
+  // Debounced save for text fields
+  const discordWebhookField = useDebouncedSave('discordWebhookUrl', settings?.discordWebhookUrl);
+  const customWebhookField = useDebouncedSave('customWebhookUrl', settings?.customWebhookUrl);
+  const ntfyTopicField = useDebouncedSave('ntfyTopic', settings?.ntfyTopic);
+  const ntfyAuthTokenField = useDebouncedSave('ntfyAuthToken', settings?.ntfyAuthToken);
+
+  // Sync webhook format with settings
   useEffect(() => {
     if (settings) {
       setWebhookFormat(settings.webhookFormat ?? 'json');
-      setNtfyTopic(settings.ntfyTopic ?? '');
-      // Don't sync auth token from server (it's masked with ********)
     }
   }, [settings]);
-
-  const handleUrlChange = (
-    key: 'discordWebhookUrl' | 'customWebhookUrl' | 'ntfyTopic' | 'ntfyAuthToken',
-    value: string
-  ) => {
-    updateSettings.mutate({ [key]: value || null });
-  };
 
   const handleTestDiscord = async () => {
     setTestingDiscord(true);
@@ -896,8 +891,8 @@ function NotificationSettings() {
       const result = await api.settings.testWebhook({
         type: 'custom',
         format: webhookFormat as 'json' | 'ntfy' | 'apprise',
-        ntfyTopic: ntfyTopic || undefined,
-        ntfyAuthToken: ntfyAuthToken || undefined,
+        ntfyTopic: ntfyTopicField.value || undefined,
+        ntfyAuthToken: ntfyAuthTokenField.value || undefined,
       });
       if (result.success) {
         toast.success('Test Successful', { description: 'Custom webhook is working correctly' });
@@ -966,15 +961,13 @@ function NotificationSettings() {
               <Input
                 id="discordWebhook"
                 placeholder="https://discord.com/api/webhooks/..."
-                defaultValue={settings?.discordWebhookUrl ?? ''}
-                onBlur={(e) => {
-                  handleUrlChange('discordWebhookUrl', e.target.value);
-                }}
+                value={discordWebhookField.value ?? ''}
+                onChange={(e) => discordWebhookField.setValue(e.target.value)}
               />
               <Button
                 variant="outline"
                 onClick={handleTestDiscord}
-                disabled={!settings?.discordWebhookUrl || testingDiscord}
+                disabled={!discordWebhookField.value || testingDiscord}
               >
                 {testingDiscord ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Test'}
               </Button>
@@ -995,10 +988,8 @@ function NotificationSettings() {
                     ? 'http://apprise:8000/notify/myconfig'
                     : 'https://your-service.com/webhook'
               }
-              defaultValue={settings?.customWebhookUrl ?? ''}
-              onBlur={(e) => {
-                handleUrlChange('customWebhookUrl', e.target.value);
-              }}
+              value={customWebhookField.value ?? ''}
+              onChange={(e) => customWebhookField.setValue(e.target.value)}
             />
             <p className="text-muted-foreground text-xs">
               {webhookFormat === 'ntfy'
@@ -1033,11 +1024,8 @@ function NotificationSettings() {
                 <Input
                   id="ntfyTopic"
                   placeholder="tracearr"
-                  value={ntfyTopic}
-                  onChange={(e) => setNtfyTopic(e.target.value)}
-                  onBlur={(e) => {
-                    handleUrlChange('ntfyTopic', e.target.value);
-                  }}
+                  value={ntfyTopicField.value ?? ''}
+                  onChange={(e) => ntfyTopicField.setValue(e.target.value)}
                 />
                 <p className="text-muted-foreground text-xs">
                   The ntfy topic to publish notifications to
@@ -1050,13 +1038,8 @@ function NotificationSettings() {
                   id="ntfyAuthToken"
                   type="password"
                   placeholder={settings?.ntfyAuthToken ? '••••••••' : 'Enter auth token'}
-                  value={ntfyAuthToken}
-                  onChange={(e) => setNtfyAuthToken(e.target.value)}
-                  onBlur={(e) => {
-                    if (e.target.value) {
-                      handleUrlChange('ntfyAuthToken', e.target.value);
-                    }
-                  }}
+                  value={ntfyAuthTokenField.value ?? ''}
+                  onChange={(e) => ntfyAuthTokenField.setValue(e.target.value)}
                 />
                 <p className="text-muted-foreground text-xs">
                   Required if your ntfy server uses access control. Leave empty for public topics.
@@ -1065,7 +1048,7 @@ function NotificationSettings() {
             </>
           )}
 
-          {settings?.customWebhookUrl && (
+          {customWebhookField.value && (
             <Button
               variant="outline"
               onClick={handleTestCustom}
@@ -1180,26 +1163,11 @@ function NetworkSettings() {
   const { data: settings, isLoading } = useSettings();
   const updateSettings = useUpdateSettings();
 
-  const [externalUrl, setExternalUrl] = useState('');
-  const [basePath, setBasePath] = useState('');
-
-  useEffect(() => {
-    if (settings) {
-      setExternalUrl(settings.externalUrl ?? '');
-      setBasePath(settings.basePath ?? '');
-    }
-  }, [settings]);
+  const externalUrlField = useDebouncedSave('externalUrl', settings?.externalUrl);
+  const basePathField = useDebouncedSave('basePath', settings?.basePath);
 
   const handleToggleTrustProxy = (enabled: boolean) => {
     updateSettings.mutate({ trustProxy: enabled });
-  };
-
-  const handleSaveExternalUrl = () => {
-    updateSettings.mutate({ externalUrl: externalUrl || null });
-  };
-
-  const handleSaveBasePath = () => {
-    updateSettings.mutate({ basePath: basePath });
   };
 
   const handleDetectUrl = () => {
@@ -1207,9 +1175,12 @@ function NetworkSettings() {
     if (import.meta.env.DEV) {
       detectedUrl = detectedUrl.replace(':5173', ':3000');
     }
-    setExternalUrl(detectedUrl);
+    externalUrlField.setValue(detectedUrl);
+    // Force immediate save since this is a programmatic change
+    setTimeout(() => externalUrlField.saveNow(), 0);
   };
 
+  const externalUrl = externalUrlField.value ?? '';
   const isLocalhost = externalUrl.includes('localhost') || externalUrl.includes('127.0.0.1');
   const isHttp = externalUrl.startsWith('http://') && !isLocalhost;
 
@@ -1246,9 +1217,8 @@ function NetworkSettings() {
               <Input
                 id="externalUrl"
                 placeholder="https://tracearr.example.com"
-                value={externalUrl}
-                onChange={(e) => setExternalUrl(e.target.value)}
-                onBlur={handleSaveExternalUrl}
+                value={externalUrlField.value ?? ''}
+                onChange={(e) => externalUrlField.setValue(e.target.value)}
               />
               <Button variant="outline" onClick={handleDetectUrl}>
                 Detect
@@ -1285,9 +1255,8 @@ function NetworkSettings() {
             <Input
               id="basePath"
               placeholder="/tracearr"
-              value={basePath}
-              onChange={(e) => setBasePath(e.target.value)}
-              onBlur={handleSaveBasePath}
+              value={basePathField.value ?? ''}
+              onChange={(e) => basePathField.setValue(e.target.value)}
             />
             <p className="text-muted-foreground text-xs">
               Only needed if running behind a reverse proxy with a path prefix (e.g.,
