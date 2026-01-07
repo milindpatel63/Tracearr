@@ -79,9 +79,11 @@ function getDecisionBadge(decision: string | null): {
     case 'directplay':
       return { variant: 'success', label: 'Direct Play' };
     case 'copy':
-      return { variant: 'secondary', label: 'Copy' };
+      return { variant: 'success', label: 'Direct Stream' };
     case 'transcode':
       return { variant: 'warning', label: 'Transcode' };
+    case 'burn':
+      return { variant: 'warning', label: 'Burn-in' };
     default:
       return { variant: 'secondary', label: '—' };
   }
@@ -354,7 +356,20 @@ export function StreamDetailsPanel({
       {/* Subtitles Section */}
       {hasSubtitleDetails && (
         <div>
-          <SectionHeader icon={Subtitles} title="Subtitles" />
+          <SectionHeader
+            icon={Subtitles}
+            title="Subtitles"
+            badge={
+              subtitleInfo?.decision ? (
+                <Badge
+                  variant={getDecisionBadge(subtitleInfo.decision).variant}
+                  className="text-xs"
+                >
+                  {getDecisionBadge(subtitleInfo.decision).label}
+                </Badge>
+              ) : undefined
+            }
+          />
           <div className="space-y-0.5 rounded-md border p-2">
             <div className="flex items-center gap-2 text-sm">
               <span className="text-muted-foreground">Format:</span>
@@ -368,14 +383,6 @@ export function StreamDetailsPanel({
               {subtitleInfo?.forced && (
                 <Badge variant="outline" className="text-xs">
                   Forced
-                </Badge>
-              )}
-              {subtitleInfo?.decision && (
-                <Badge
-                  variant={subtitleInfo.decision === 'burn' ? 'warning' : 'secondary'}
-                  className="ml-auto text-xs"
-                >
-                  {subtitleInfo.decision === 'burn' ? 'Burn-in' : subtitleInfo.decision}
                 </Badge>
               )}
             </div>

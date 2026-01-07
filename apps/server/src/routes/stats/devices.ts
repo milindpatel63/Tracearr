@@ -440,21 +440,22 @@ export const devicesRoutes: FastifyPluginAsync = async (app) => {
 
       const result = await db.execute(sql`
         SELECT
-          s.server_user_id,
-          COALESCE(u.username, 'Unknown') AS username,
-          u.identity_name,
-          u.thumb_url AS avatar,
+          su.id AS server_user_id,
+          COALESCE(su.username, 'Unknown') AS username,
+          u.name AS identity_name,
+          su.thumb_url AS avatar,
           COUNT(*)::int AS total_sessions,
           COUNT(*) FILTER (WHERE s.video_decision = 'directplay' AND s.audio_decision = 'directplay')::int AS direct_play_count,
           COUNT(*) FILTER (WHERE s.video_decision != 'directplay' OR s.audio_decision != 'directplay')::int AS transcode_count,
           ROUND(100.0 * COUNT(*) FILTER (WHERE s.video_decision = 'directplay' AND s.audio_decision = 'directplay') / NULLIF(COUNT(*), 0), 1) AS direct_play_pct
         FROM sessions s
-        LEFT JOIN server_users u ON s.server_user_id = u.id
+        JOIN server_users su ON s.server_user_id = su.id
+        LEFT JOIN users u ON su.user_id = u.id
         ${baseWhere}
         AND s.source_video_codec IS NOT NULL
         ${period === 'custom' ? sql`AND s.started_at < ${dateRange.end}` : sql``}
         ${serverFilter}
-        GROUP BY s.server_user_id, u.username, u.identity_name, u.thumb_url
+        GROUP BY su.id, su.username, su.thumb_url, u.name
         HAVING COUNT(*) FILTER (WHERE s.video_decision != 'directplay' OR s.audio_decision != 'directplay') > 0
         ORDER BY transcode_count DESC
         LIMIT 10
