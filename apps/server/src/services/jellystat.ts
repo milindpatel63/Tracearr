@@ -325,8 +325,18 @@ export function transformActivityToSession(
       : null;
 
   const mediaType: 'movie' | 'episode' | 'track' = activity.SeriesName ? 'episode' : 'movie';
+
+  // Extract TranscodingInfo for DirectStream vs DirectPlay detection
+  // Jellystat exports "DirectStream" for what Emby shows as "DirectPlay"
+  const activityAnyForTranscode = activity as Record<string, unknown>;
+  const transcodingInfoForDecision = activityAnyForTranscode.TranscodingInfo as {
+    IsVideoDirect?: boolean | null;
+    IsAudioDirect?: boolean | null;
+  } | null;
+
   const { videoDecision, audioDecision, isTranscode } = parseJellystatPlayMethod(
-    activity.PlayMethod
+    activity.PlayMethod,
+    transcodingInfoForDecision
   );
 
   // Extract stream details from MediaStreams and TranscodingInfo

@@ -118,8 +118,15 @@ export function normalizePlayMethod(
 /**
  * Parse Jellystat PlayMethod format with embedded codec info
  * e.g., "Transcode (v:direct a:aac)"
+ *
+ * Note: Jellystat exports "DirectStream" for sessions that Emby actually shows as "DirectPlay".
+ * When TranscodingInfo is absent or shows both streams are direct, treat DirectStream as DirectPlay.
+ * This matches the logic in getStreamDecisionsEmby for live sessions.
  */
-export function parseJellystatPlayMethod(playMethod: string | null | undefined): StreamDecisions {
+export function parseJellystatPlayMethod(
+  playMethod: string | null | undefined,
+  transcodingInfo?: { IsVideoDirect?: boolean | null; IsAudioDirect?: boolean | null } | null
+): StreamDecisions {
   if (!playMethod) {
     return {
       videoDecision: 'directplay',
@@ -137,6 +144,20 @@ export function parseJellystatPlayMethod(playMethod: string | null | undefined):
   }
 
   if (playMethod === 'DirectStream') {
+    // Jellystat exports "DirectStream" for what Emby shows as "DirectPlay".
+    // Treat as DirectPlay when TranscodingInfo is absent or shows both streams are direct.
+    const isVideoDirect = transcodingInfo?.IsVideoDirect;
+    const isAudioDirect = transcodingInfo?.IsAudioDirect;
+
+    if (!transcodingInfo || (isVideoDirect !== false && isAudioDirect !== false)) {
+      return {
+        videoDecision: 'directplay',
+        audioDecision: 'directplay',
+        isTranscode: false,
+      };
+    }
+
+    // Real DirectStream (container remux)
     return {
       videoDecision: 'copy',
       audioDecision: 'copy',

@@ -212,11 +212,67 @@ describe('transcodeNormalizer', () => {
       });
     });
 
-    it('should handle DirectStream', () => {
-      expect(parseJellystatPlayMethod('DirectStream')).toEqual({
-        videoDecision: 'copy',
-        audioDecision: 'copy',
-        isTranscode: false,
+    describe('DirectStream handling', () => {
+      it('should treat DirectStream as DirectPlay when no TranscodingInfo', () => {
+        // Jellystat exports "DirectStream" for what Emby shows as "DirectPlay"
+        expect(parseJellystatPlayMethod('DirectStream')).toEqual({
+          videoDecision: 'directplay',
+          audioDecision: 'directplay',
+          isTranscode: false,
+        });
+
+        expect(parseJellystatPlayMethod('DirectStream', null)).toEqual({
+          videoDecision: 'directplay',
+          audioDecision: 'directplay',
+          isTranscode: false,
+        });
+      });
+
+      it('should treat DirectStream as DirectPlay when both streams are direct', () => {
+        expect(
+          parseJellystatPlayMethod('DirectStream', { IsVideoDirect: true, IsAudioDirect: true })
+        ).toEqual({
+          videoDecision: 'directplay',
+          audioDecision: 'directplay',
+          isTranscode: false,
+        });
+      });
+
+      it('should treat DirectStream as DirectPlay when flags are not false', () => {
+        // Flags not set (undefined/null) should be treated as direct
+        expect(parseJellystatPlayMethod('DirectStream', {})).toEqual({
+          videoDecision: 'directplay',
+          audioDecision: 'directplay',
+          isTranscode: false,
+        });
+
+        expect(
+          parseJellystatPlayMethod('DirectStream', { IsVideoDirect: null, IsAudioDirect: null })
+        ).toEqual({
+          videoDecision: 'directplay',
+          audioDecision: 'directplay',
+          isTranscode: false,
+        });
+      });
+
+      it('should treat DirectStream as real DirectStream (copy) when a stream is not direct', () => {
+        // Video being remuxed
+        expect(
+          parseJellystatPlayMethod('DirectStream', { IsVideoDirect: false, IsAudioDirect: true })
+        ).toEqual({
+          videoDecision: 'copy',
+          audioDecision: 'copy',
+          isTranscode: false,
+        });
+
+        // Audio being remuxed
+        expect(
+          parseJellystatPlayMethod('DirectStream', { IsVideoDirect: true, IsAudioDirect: false })
+        ).toEqual({
+          videoDecision: 'copy',
+          audioDecision: 'copy',
+          isTranscode: false,
+        });
       });
     });
 
