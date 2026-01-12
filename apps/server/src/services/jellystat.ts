@@ -276,9 +276,10 @@ interface MediaServerClientWithItems {
 }
 
 /**
- * Parse and validate Jellystat backup file
+ * Parse and validate Jellystat backup file structure
+ * Returns raw activity records - individual records are validated during import
  */
-export function parseJellystatBackup(jsonString: string): JellystatPlaybackActivity[] {
+export function parseJellystatBackup(jsonString: string): unknown[] {
   const data: unknown = JSON.parse(jsonString);
   const parsed = jellystatBackupSchema.safeParse(data);
 
@@ -288,8 +289,7 @@ export function parseJellystatBackup(jsonString: string): JellystatPlaybackActiv
 
   // Find the section containing playback activity (position varies in backup files)
   const playbackSection = parsed.data.find(
-    (section): section is { jf_playback_activity: JellystatPlaybackActivity[] } =>
-      'jf_playback_activity' in section
+    (section): section is { jf_playback_activity: unknown[] } => 'jf_playback_activity' in section
   );
   const activities = playbackSection?.jf_playback_activity ?? [];
   return activities;
@@ -503,12 +503,12 @@ export async function importJellystatBackup(
     progress.message = 'Parsing Jellystat backup file...';
     publishProgress(progress);
 
-    const activities = parseJellystatBackup(backupJson);
-    progress.totalRecords = activities.length;
-    progress.message = `Parsed ${activities.length} records from backup`;
+    const rawActivities = parseJellystatBackup(backupJson);
+    progress.totalRecords = rawActivities.length;
+    progress.message = `Parsed ${rawActivities.length} records from backup`;
     publishProgress(progress);
 
-    if (activities.length === 0) {
+    if (rawActivities.length === 0) {
       progress.status = 'complete';
       progress.message = 'No playback activity records found in backup';
       publishProgress(progress);
@@ -521,6 +521,30 @@ export async function importJellystatBackup(
         enriched: 0,
         message: 'No playback activity records found in backup',
       };
+    }
+
+    // Validate records individually - skip bad records instead of failing entire backup
+    const { jellystatPlaybackActivitySchema } = await import('@tracearr/shared');
+    const activities: JellystatPlaybackActivity[] = [];
+    let parseErrors = 0;
+
+    for (const raw of rawActivities) {
+      const parsed = jellystatPlaybackActivitySchema.safeParse(raw);
+      if (parsed.success) {
+        activities.push(parsed.data);
+      } else {
+        const activityId = (raw as Record<string, unknown>)?.Id ?? 'unknown';
+        console.warn(
+          `[Jellystat] Skipping malformed record ${activityId}:`,
+          parsed.error.issues[0]
+        );
+        parseErrors++;
+        progress.errorRecords++;
+      }
+    }
+
+    if (parseErrors > 0) {
+      console.warn(`[Jellystat] Skipped ${parseErrors} malformed records during parsing`);
     }
 
     const [server] = await db.select().from(servers).where(eq(servers.id, serverId)).limit(1);

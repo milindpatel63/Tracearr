@@ -459,10 +459,11 @@ export const jellystatPlaybackActivitySchema = z.looseObject({
 /**
  * Jellystat backup file structure
  * The backup is an array with a single object containing table data
+ * Individual activity records are validated separately during import to skip bad records
  */
 export const jellystatBackupSchema = z.array(
   z.object({
-    jf_playback_activity: z.array(jellystatPlaybackActivitySchema).optional(),
+    jf_playback_activity: z.array(z.unknown()).optional(), // Validate records individually during import
   })
 );
 

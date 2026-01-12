@@ -443,7 +443,8 @@ describe('parseJellystatBackup', () => {
     const json = JSON.stringify(VALID_BACKUP_MULTIPLE);
     const activities = parseJellystatBackup(json);
     expect(activities).toHaveLength(3);
-    expect(activities[0]?.Id).toBe(MOVIE_ACTIVITY.Id);
+    // parseJellystatBackup returns unknown[] for deferred validation
+    expect((activities[0] as Record<string, unknown>)?.Id).toBe(MOVIE_ACTIVITY.Id);
   });
 
   it('should return empty array for empty backup', () => {
