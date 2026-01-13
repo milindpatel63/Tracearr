@@ -11,10 +11,11 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field, FieldLabel, FieldError } from '@/components/ui/field';
 import { useUpdateSettings } from '@/hooks/queries/useSettings';
 import { toast } from 'sonner';
 import type { NotificationAgentType } from './types';
+import { validateField } from './types';
 import { AGENT_CONFIGS } from './agent-config';
 
 interface EditAgentDialogProps {
@@ -27,6 +28,8 @@ interface EditAgentDialogProps {
 export function EditAgentDialog({ open, onOpenChange, agentType, settings }: EditAgentDialogProps) {
   const updateSettings = useUpdateSettings({ silent: true });
   const [formData, setFormData] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   const config = AGENT_CONFIGS[agentType];
 
@@ -43,19 +46,64 @@ export function EditAgentDialog({ open, onOpenChange, agentType, settings }: Edi
       });
 
       setFormData(initialData);
+      setFieldErrors({});
+      setTouched({});
     }
   }, [open, settings, config]);
 
   const handleFieldChange = (key: string, value: string) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
+
+    const field = config.fields.find((f) => f.key === key);
+    if (field && touched[key]) {
+      setFieldErrors((prev) => ({ ...prev, [key]: validateField(field, value) }));
+    }
+  };
+
+  const handleFieldBlur = (key: string) => {
+    setTouched((prev) => ({ ...prev, [key]: true }));
+
+    // Validate on blur
+    const field = config.fields.find((f) => f.key === key);
+    if (field) {
+      setFieldErrors((prev) => ({ ...prev, [key]: validateField(field, formData[key]) }));
+    }
+  };
+
+  const validateAllFields = (): boolean => {
+    const errors: Record<string, string | null> = {};
+    let hasErrors = false;
+
+    config.fields.forEach((field) => {
+      const error = validateField(field, formData[field.key]);
+      errors[field.key] = error;
+      if (error) hasErrors = true;
+    });
+
+    setFieldErrors(errors);
+    const allTouched: Record<string, boolean> = {};
+    config.fields.forEach((field) => {
+      allTouched[field.key] = true;
+    });
+    setTouched(allTouched);
+
+    return !hasErrors;
   };
 
   const canSave = () => {
-    // Check all required fields are filled
-    return config.fields.filter((f) => f.required).every((f) => formData[f.key]?.trim());
+    const requiredFilled = config.fields
+      .filter((f) => f.required)
+      .every((f) => formData[f.key]?.trim());
+    const noErrors = !Object.values(fieldErrors).some((e) => e !== null);
+    return requiredFilled && noErrors;
   };
 
   const handleSave = async () => {
+    // Validate all fields before saving
+    if (!validateAllFields()) {
+      return;
+    }
+
     // Build settings update
     const update: Record<string, string | null> = {};
 
@@ -107,21 +155,27 @@ export function EditAgentDialog({ open, onOpenChange, agentType, settings }: Edi
               No configuration available for this agent.
             </p>
           ) : (
-            config.fields.map((field) => (
-              <div key={field.key} className="space-y-2">
-                <Label htmlFor={field.key}>
-                  {field.label}
-                  {field.required && <span className="text-destructive ml-1">*</span>}
-                </Label>
-                <Input
-                  id={field.key}
-                  type={field.type === 'secret' ? 'password' : 'text'}
-                  placeholder={field.placeholder}
-                  value={formData[field.key] ?? ''}
-                  onChange={(e) => handleFieldChange(field.key, e.target.value)}
-                />
-              </div>
-            ))
+            config.fields.map((field) => {
+              const error = touched[field.key] ? fieldErrors[field.key] : null;
+              return (
+                <Field key={field.key} data-invalid={!!error}>
+                  <FieldLabel htmlFor={field.key}>
+                    {field.label}
+                    {field.required && <span className="text-destructive ml-1">*</span>}
+                  </FieldLabel>
+                  <Input
+                    id={field.key}
+                    type={field.type === 'secret' ? 'password' : 'text'}
+                    placeholder={field.placeholder}
+                    value={formData[field.key] ?? ''}
+                    onChange={(e) => handleFieldChange(field.key, e.target.value)}
+                    onBlur={() => handleFieldBlur(field.key)}
+                    aria-invalid={!!error}
+                  />
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            })
           )}
         </div>
 

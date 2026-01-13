@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useSettings, useUpdateSettings } from '@/hooks/queries/useSettings';
 import { useChannelRouting, useUpdateChannelRouting } from '@/hooks/queries/useChannelRouting';
 import type { RoutingChannel, NotificationAgentType } from './types';
-import { useActiveAgents, useAvailableAgentTypes } from './useActiveAgents';
+import { useActiveAgents, useAddableAgents } from './useActiveAgents';
 import { AgentCard } from './AgentCard';
 import { AddAgentDialog } from './AddAgentDialog';
 import { EditAgentDialog } from './EditAgentDialog';
@@ -28,7 +28,8 @@ export function NotificationAgentsManager() {
 
   // Derive agents from settings
   const activeAgents = useActiveAgents(settings);
-  const availableAgentTypes = useAvailableAgentTypes(activeAgents);
+  const { discord, webhookAgents, activeWebhookAgent } = useAddableAgents(activeAgents);
+  const hasAddableAgents = discord !== null || webhookAgents.length > 0;
 
   const isLoading = settingsLoading || routingLoading;
 
@@ -170,7 +171,7 @@ export function NotificationAgentsManager() {
       </div>
 
       {/* Add agent button */}
-      {availableAgentTypes.length > 0 && (
+      {hasAddableAgents && (
         <Button variant="outline" onClick={() => setAddDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Add Notification Agent
@@ -181,7 +182,9 @@ export function NotificationAgentsManager() {
       <AddAgentDialog
         open={addDialogOpen}
         onOpenChange={setAddDialogOpen}
-        availableTypes={availableAgentTypes}
+        discord={discord}
+        webhookAgents={webhookAgents}
+        activeWebhookAgent={activeWebhookAgent}
         settings={settings}
       />
 

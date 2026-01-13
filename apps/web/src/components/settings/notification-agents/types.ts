@@ -34,6 +34,41 @@ export interface AgentFieldConfig {
   required?: boolean;
 }
 
+function validateUrl(url: string): string | null {
+  // Must start with http:// or https://
+  if (!/^https?:\/\//i.test(url)) {
+    return 'URL must start with http:// or https://';
+  }
+
+  const afterProtocol = url.replace(/^https?:\/\//i, '');
+  if (!afterProtocol || afterProtocol === '/') {
+    return 'Please enter a valid URL';
+  }
+
+  const hostPart = afterProtocol.split('/')[0];
+  if (!hostPart || /\s/.test(hostPart)) {
+    return 'Please enter a valid URL';
+  }
+
+  return null;
+}
+
+export function validateField(field: AgentFieldConfig, value: string | undefined): string | null {
+  const trimmed = value?.trim() ?? '';
+
+  if (field.required && !trimmed) {
+    return `${field.label} is required`;
+  }
+
+  if (!trimmed) return null;
+
+  if (field.type === 'url') {
+    return validateUrl(trimmed);
+  }
+
+  return null;
+}
+
 /**
  * Static configuration for an agent type
  */

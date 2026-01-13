@@ -380,7 +380,11 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
       pushoverApiToken = request.body.pushoverApiToken ?? currentSettings?.pushoverApiToken ?? null;
     }
 
-    if (!webhookUrl) {
+    if (webhookFormat === 'pushover') {
+      if (!pushoverUserKey || !pushoverApiToken) {
+        return reply.badRequest('Pushover requires User Key and API Token');
+      }
+    } else if (!webhookUrl) {
       return reply.badRequest(`No ${type} webhook URL configured`);
     }
 

@@ -349,8 +349,33 @@ export const webhookFormatSchema = z.enum(['json', 'ntfy', 'apprise', 'pushover'
 // Unit system enum for display preferences
 export const unitSystemSchema = z.enum(['metric', 'imperial']);
 
+const permissiveUrlSchema = z.string().refine(
+  (val) => {
+    // Must start with http:// or https://
+    if (!/^https?:\/\//i.test(val)) return false;
+    // Must have something after the protocol
+    const afterProtocol = val.replace(/^https?:\/\//i, '');
+    if (!afterProtocol || afterProtocol === '/') return false;
+    // Check hostname doesn't have whitespace
+    const hostPart = afterProtocol.split('/')[0];
+    if (!hostPart || /\s/.test(hostPart)) return false;
+    return true;
+  },
+  { message: 'Invalid URL. Must start with http:// or https:// followed by a hostname' }
+);
+
 // Nullable URL schema that converts empty strings to null (for clearing fields)
-const nullableUrlSchema = z.preprocess((val) => (val === '' ? null : val), z.url().nullable());
+// Auto-prepends http:// if a bare hostname is provided (no protocol)
+const nullableUrlSchema = z.preprocess((val) => {
+  if (val === '' || val === null || val === undefined) return null;
+  const str = String(val).trim();
+  if (!str) return null;
+  // Auto-prepend http:// if no protocol specified (for convenience)
+  if (str && !/^https?:\/\//i.test(str)) {
+    return `http://${str}`;
+  }
+  return str;
+}, permissiveUrlSchema.nullable());
 
 // Nullable string schema that converts empty strings to null (for clearing fields)
 const nullableStringSchema = (maxLength?: number) =>

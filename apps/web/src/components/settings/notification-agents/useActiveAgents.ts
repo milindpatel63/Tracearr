@@ -9,12 +9,22 @@ import { AGENT_CONFIGS, CUSTOM_WEBHOOK_AGENTS } from './agent-config';
 function truncateUrl(url: string, maxLength = 30): string {
   try {
     const parsed = new URL(url);
-    const display = `${parsed.host}${parsed.pathname}`;
+    const pathname = parsed.pathname.length > 1 ? parsed.pathname.replace(/\/+$/, '') : '';
+    const display = `${parsed.host}${pathname}`;
     if (display.length <= maxLength) return display;
     return `${display.substring(0, maxLength - 3)}...`;
   } catch {
-    return url.substring(0, maxLength);
+    const cleaned = url.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    if (cleaned.length <= maxLength) return cleaned;
+    return `${cleaned.substring(0, maxLength - 3)}...`;
   }
+}
+
+function joinUrlPath(baseUrl: string, segment: string): string {
+  const base = truncateUrl(baseUrl);
+  const cleanSegment = segment.replace(/^\/+/, '');
+  if (!base) return cleanSegment;
+  return `${base}/${cleanSegment}`;
 }
 
 /**
@@ -60,9 +70,10 @@ export function useActiveAgents(settings: Settings | undefined): ActiveAgent[] {
         switch (agentType) {
           case 'ntfy':
             isConfigured = !!settings.customWebhookUrl && !!settings.ntfyTopic;
-            displayValue = settings.ntfyTopic
-              ? `${truncateUrl(settings.customWebhookUrl || '')}/${settings.ntfyTopic}`
-              : undefined;
+            displayValue =
+              settings.customWebhookUrl && settings.ntfyTopic
+                ? joinUrlPath(settings.customWebhookUrl, settings.ntfyTopic)
+                : undefined;
             break;
           case 'pushover':
             isConfigured = !!settings.pushoverUserKey && !!settings.pushoverApiToken;
@@ -105,7 +116,54 @@ export function useActiveAgents(settings: Settings | undefined): ActiveAgent[] {
 }
 
 /**
+ * Info about an agent type that can be added
+ */
+export interface AddableAgentInfo {
+  type: NotificationAgentType;
+  isAvailable: boolean;
+  unavailableReason?: string;
+  blockedBy?: NotificationAgentType;
+}
+
+/**
+ * Get all addable agent types with their availability status.
+ * Shows all agents but indicates which are unavailable and why.
+ */
+export function useAddableAgents(activeAgents: ActiveAgent[]): {
+  discord: AddableAgentInfo | null;
+  webhookAgents: AddableAgentInfo[];
+  activeWebhookAgent: NotificationAgentType | null;
+} {
+  return useMemo(() => {
+    const activeTypes = new Set(activeAgents.map((a) => a.type));
+
+    const discord: AddableAgentInfo | null = activeTypes.has('discord')
+      ? null
+      : { type: 'discord', isAvailable: true };
+
+    const activeWebhookAgent = CUSTOM_WEBHOOK_AGENTS.find((type) => activeTypes.has(type)) ?? null;
+
+    const webhookAgents: AddableAgentInfo[] = CUSTOM_WEBHOOK_AGENTS.filter(
+      (type) => !activeTypes.has(type)
+    ).map((type) => {
+      if (activeWebhookAgent) {
+        return {
+          type,
+          isAvailable: false,
+          unavailableReason: `Only one webhook agent can be active. Remove ${AGENT_CONFIGS[activeWebhookAgent].name} first.`,
+          blockedBy: activeWebhookAgent,
+        };
+      }
+      return { type, isAvailable: true };
+    });
+
+    return { discord, webhookAgents, activeWebhookAgent };
+  }, [activeAgents]);
+}
+
+/**
  * Get agent types that are available to add (not already active)
+ * @deprecated Use useAddableAgents instead for better UX
  */
 export function useAvailableAgentTypes(activeAgents: ActiveAgent[]): NotificationAgentType[] {
   return useMemo(() => {

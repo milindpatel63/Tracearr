@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Settings } from '@tracearr/shared';
-import { Loader2, ChevronRight } from 'lucide-react';
+import { Loader2, ChevronRight, Lock } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -11,35 +11,99 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field, FieldLabel, FieldError } from '@/components/ui/field';
 import { useUpdateSettings } from '@/hooks/queries/useSettings';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { NotificationAgentType } from './types';
-import { AGENT_CONFIGS, CUSTOM_WEBHOOK_AGENTS } from './agent-config';
+import { validateField } from './types';
+import type { AddableAgentInfo } from './useActiveAgents';
+import { AGENT_CONFIGS } from './agent-config';
+
+interface AgentOptionButtonProps {
+  agentInfo: AddableAgentInfo;
+  onSelect: () => void;
+}
+
+function AgentOptionButton({ agentInfo, onSelect }: AgentOptionButtonProps) {
+  const config = AGENT_CONFIGS[agentInfo.type];
+  const Icon = config.icon;
+  const isDisabled = !agentInfo.isAvailable;
+
+  return (
+    <button
+      type="button"
+      onClick={isDisabled ? undefined : onSelect}
+      disabled={isDisabled}
+      className={cn(
+        'flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors',
+        isDisabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-muted hover:border-primary/50'
+      )}
+    >
+      <div
+        className={cn(
+          'flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg',
+          isDisabled ? 'bg-muted/50' : 'bg-muted'
+        )}
+      >
+        {config.imagePath ? (
+          <img
+            src={config.imagePath}
+            alt={config.name}
+            className={cn('h-full w-full object-cover', isDisabled && 'grayscale')}
+          />
+        ) : (
+          <Icon className="h-5 w-5" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="font-medium">{config.name}</p>
+        <p className="text-muted-foreground truncate text-xs">
+          {isDisabled ? agentInfo.unavailableReason : config.description}
+        </p>
+      </div>
+      {isDisabled ? (
+        <Lock className="text-muted-foreground h-4 w-4 flex-shrink-0" />
+      ) : (
+        <ChevronRight className="text-muted-foreground h-4 w-4 flex-shrink-0" />
+      )}
+    </button>
+  );
+}
 
 interface AddAgentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  availableTypes: NotificationAgentType[];
+  /** Discord agent info (null if already configured) */
+  discord: AddableAgentInfo | null;
+  /** Webhook agents with availability info */
+  webhookAgents: AddableAgentInfo[];
+  /** Currently active webhook agent (for messaging) */
+  activeWebhookAgent: NotificationAgentType | null;
   settings: Settings | undefined;
 }
 
 export function AddAgentDialog({
   open,
   onOpenChange,
-  availableTypes,
+  discord,
+  webhookAgents,
+  activeWebhookAgent,
   settings,
 }: AddAgentDialogProps) {
   const updateSettings = useUpdateSettings({ silent: true });
   const [selectedType, setSelectedType] = useState<NotificationAgentType | null>(null);
   const [formData, setFormData] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   // Reset form when dialog opens/closes
   useEffect(() => {
     if (open) {
       setSelectedType(null);
       setFormData({});
+      setFieldErrors({});
+      setTouched({});
     }
   }, [open]);
 
@@ -64,17 +128,75 @@ export function AddAgentDialog({
 
   const handleFieldChange = (key: string, value: string) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
+
+    // Validate on change if the field has been touched
+    if (selectedConfig) {
+      const field = selectedConfig.fields.find((f) => f.key === key);
+      if (field && touched[key]) {
+        setFieldErrors((prev) => ({ ...prev, [key]: validateField(field, value) }));
+      }
+    }
+  };
+
+  const handleFieldBlur = (key: string) => {
+    setTouched((prev) => ({ ...prev, [key]: true }));
+
+    // Validate on blur
+    if (selectedConfig) {
+      const field = selectedConfig.fields.find((f) => f.key === key);
+      if (field) {
+        setFieldErrors((prev) => ({ ...prev, [key]: validateField(field, formData[key]) }));
+      }
+    }
+  };
+
+  const validateAllFields = (): boolean => {
+    if (!selectedConfig) return false;
+
+    const errors: Record<string, string | null> = {};
+    let hasErrors = false;
+
+    selectedConfig.fields.forEach((field) => {
+      const error = validateField(field, formData[field.key]);
+      errors[field.key] = error;
+      if (error) hasErrors = true;
+    });
+
+    setFieldErrors(errors);
+    // Mark all fields as touched to show errors
+    const allTouched: Record<string, boolean> = {};
+    selectedConfig.fields.forEach((field) => {
+      allTouched[field.key] = true;
+    });
+    setTouched(allTouched);
+
+    return !hasErrors;
   };
 
   const canSave = () => {
     if (!selectedConfig) return false;
 
     // Check all required fields are filled
-    return selectedConfig.fields.filter((f) => f.required).every((f) => formData[f.key]?.trim());
+    const requiredFilled = selectedConfig.fields
+      .filter((f) => f.required)
+      .every((f) => formData[f.key]?.trim());
+
+    // Validate all fields (not just those with errors in state)
+    const allValid = selectedConfig.fields.every((field) => {
+      const error = validateField(field, formData[field.key]);
+      return error === null;
+    });
+
+    return requiredFilled && allValid;
   };
 
   const handleSave = async () => {
     if (!selectedConfig) return;
+
+    // Validate all fields before saving
+    if (!validateAllFields()) {
+      return;
+    }
 
     // Build settings update
     const update: Partial<Settings> = {};
@@ -111,43 +233,54 @@ export function AddAgentDialog({
           <DialogDescription>Choose a notification service and configure it.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <div className="space-y-4 overflow-hidden py-2">
           {/* Agent type selector */}
           {!selectedType && (
-            <div className="space-y-2">
-              {availableTypes.map((type) => {
-                const config = AGENT_CONFIGS[type];
-                const Icon = config.icon;
+            <div className="space-y-4">
+              {/* Discord - standalone */}
+              {discord && (
+                <AgentOptionButton
+                  agentInfo={discord}
+                  onSelect={() => setSelectedType(discord.type)}
+                />
+              )}
 
-                return (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => setSelectedType(type)}
-                    className={cn(
-                      'flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors',
-                      'hover:bg-muted hover:border-primary/50'
-                    )}
-                  >
-                    <div className="bg-muted flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg">
-                      {config.imagePath ? (
-                        <img
-                          src={config.imagePath}
-                          alt={config.name}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <Icon className="h-5 w-5" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium">{config.name}</p>
-                      <p className="text-muted-foreground text-xs">{config.description}</p>
-                    </div>
-                    <ChevronRight className="text-muted-foreground h-4 w-4" />
-                  </button>
-                );
-              })}
+              {/* Webhook agents group */}
+              {webhookAgents.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
+                      Webhook Agents
+                    </span>
+                    <div className="bg-border h-px flex-1" />
+                  </div>
+                  {activeWebhookAgent && (
+                    <p className="text-muted-foreground text-xs">
+                      Only one webhook agent can be active at a time.{' '}
+                      <span className="text-foreground font-medium">
+                        {AGENT_CONFIGS[activeWebhookAgent].name}
+                      </span>{' '}
+                      is currently configured.
+                    </p>
+                  )}
+                  <div className="space-y-2">
+                    {webhookAgents.map((agentInfo) => (
+                      <AgentOptionButton
+                        key={agentInfo.type}
+                        agentInfo={agentInfo}
+                        onSelect={() => setSelectedType(agentInfo.type)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Empty state */}
+              {!discord && webhookAgents.length === 0 && (
+                <p className="text-muted-foreground py-4 text-center text-sm">
+                  All notification agents are already configured.
+                </p>
+              )}
             </div>
           )}
 
@@ -187,39 +320,28 @@ export function AddAgentDialog({
                   No configuration needed for this agent.
                 </p>
               ) : (
-                selectedConfig.fields.map((field) => (
-                  <div key={field.key} className="space-y-2">
-                    <Label htmlFor={field.key}>
-                      {field.label}
-                      {field.required && <span className="text-destructive ml-1">*</span>}
-                    </Label>
-                    <Input
-                      id={field.key}
-                      type={field.type === 'secret' ? 'password' : 'text'}
-                      placeholder={field.placeholder}
-                      value={formData[field.key] ?? ''}
-                      onChange={(e) => handleFieldChange(field.key, e.target.value)}
-                    />
-                  </div>
-                ))
+                selectedConfig.fields.map((field) => {
+                  const error = touched[field.key] ? fieldErrors[field.key] : null;
+                  return (
+                    <Field key={field.key} data-invalid={!!error}>
+                      <FieldLabel htmlFor={field.key}>
+                        {field.label}
+                        {field.required && <span className="text-destructive ml-1">*</span>}
+                      </FieldLabel>
+                      <Input
+                        id={field.key}
+                        type={field.type === 'secret' ? 'password' : 'text'}
+                        placeholder={field.placeholder}
+                        value={formData[field.key] ?? ''}
+                        onChange={(e) => handleFieldChange(field.key, e.target.value)}
+                        onBlur={() => handleFieldBlur(field.key)}
+                        aria-invalid={!!error}
+                      />
+                      {error && <FieldError>{error}</FieldError>}
+                    </Field>
+                  );
+                })
               )}
-
-              {/* Warning for custom webhook agents replacing existing */}
-              {selectedType &&
-                CUSTOM_WEBHOOK_AGENTS.includes(selectedType) &&
-                settings?.webhookFormat &&
-                settings.webhookFormat !== selectedConfig.webhookFormat && (
-                  <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-3">
-                    <p className="text-sm text-amber-600">
-                      This will replace your current{' '}
-                      <strong>
-                        {AGENT_CONFIGS[settings.webhookFormat as NotificationAgentType]?.name ??
-                          'webhook'}
-                      </strong>{' '}
-                      configuration. Only one custom webhook agent can be active at a time.
-                    </p>
-                  </div>
-                )}
             </div>
           )}
         </div>
