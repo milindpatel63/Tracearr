@@ -125,12 +125,25 @@ export function getBitrate(session: Record<string, unknown>): number {
   // Fall back to source media bitrate
   const nowPlaying = getNestedObject(session, 'NowPlayingItem');
 
-  // Jellyfin: NowPlayingItem.MediaSources[0].Bitrate
+  // Jellyfin/Emby: NowPlayingItem.MediaSources[0].Bitrate (when available)
   const mediaSources = nowPlaying?.MediaSources;
   if (Array.isArray(mediaSources) && mediaSources.length > 0) {
     const firstSource = mediaSources[0] as Record<string, unknown>;
     const bitrate = parseNumber(firstSource?.Bitrate);
     if (bitrate > 0) return Math.round(bitrate / 1000);
+  }
+
+  // Jellyfin/Emby: NowPlayingItem.MediaStreams[].BitRate (from video stream)
+  // This is the reliable source for both platforms in the /Sessions API
+  const mediaStreams = nowPlaying?.MediaStreams;
+  if (Array.isArray(mediaStreams)) {
+    for (const stream of mediaStreams) {
+      const streamObj = stream as Record<string, unknown>;
+      if (parseOptionalString(streamObj.Type)?.toLowerCase() === 'video') {
+        const bitrate = parseNumber(streamObj.BitRate);
+        if (bitrate > 0) return Math.round(bitrate / 1000);
+      }
+    }
   }
 
   // Emby: NowPlayingItem.Bitrate (directly on item)
