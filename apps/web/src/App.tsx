@@ -21,6 +21,7 @@ import { Rules } from '@/pages/Rules';
 import { Violations } from '@/pages/Violations';
 import { History } from '@/pages/History';
 import { Settings } from '@/pages/Settings';
+import { ApiDocs } from '@/pages/ApiDocs';
 import { Debug } from '@/pages/Debug';
 import { NotFound } from '@/pages/NotFound';
 
@@ -65,6 +66,7 @@ export function App() {
           <Route path="rules" element={<Rules />} />
           <Route path="violations" element={<Violations />} />
           <Route path="settings/*" element={<Settings />} />
+          <Route path="api-docs" element={<ApiDocs />} />
 
           {/* Hidden debug page (owner only) */}
           <Route path="debug" element={<Debug />} />
