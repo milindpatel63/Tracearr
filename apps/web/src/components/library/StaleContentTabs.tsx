@@ -31,13 +31,18 @@ type SortOrder = 'asc' | 'desc';
  * Format days stale into human-readable string
  */
 function formatStaleTime(days: number): string {
-  if (days < 30) return `${days} days`;
+  if (days < 30) return `${days} day${days !== 1 ? 's' : ''}`;
   if (days < 365) {
-    const months = Math.round(days / 30);
+    const months = Math.floor(days / 30);
     return `${months} month${months !== 1 ? 's' : ''}`;
   }
-  const years = Math.round(days / 365);
-  return `${years} year${years !== 1 ? 's' : ''}`;
+  const years = Math.floor(days / 365);
+  const remainingDays = days % 365;
+  const months = Math.floor(remainingDays / 30);
+  if (months === 0) {
+    return `${years} year${years !== 1 ? 's' : ''}`;
+  }
+  return `${years}y ${months}m`;
 }
 
 /**
