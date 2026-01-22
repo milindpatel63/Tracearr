@@ -454,7 +454,11 @@ export function parseProviderIds(providerIds: unknown): {
   const result: { imdbId?: string; tmdbId?: number; tvdbId?: number } = {};
 
   if (typeof imdbRaw === 'string' && imdbRaw.length > 0) {
-    result.imdbId = imdbRaw;
+    // Extract valid IMDB ID (tt followed by digits) - handles malformed data like "tt37547598/?ref_=..."
+    const imdbMatch = imdbRaw.match(/^(tt\d+)/);
+    if (imdbMatch) {
+      result.imdbId = imdbMatch[1];
+    }
   }
 
   if (tmdbRaw !== undefined && tmdbRaw !== null) {
