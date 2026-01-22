@@ -668,7 +668,7 @@ export const libraryStaleQuerySchema = z.object({
   mediaType: z.enum(['movie', 'show', 'artist']).optional(),
   staleDays: z.coerce.number().int().min(1).default(90), // Configurable threshold
   category: z.enum(['all', 'never_watched', 'stale']).default('all'),
-  sortBy: z.enum(['size', 'days_stale', 'title']).default('size'),
+  sortBy: z.enum(['size', 'days_stale', 'title', 'added_at']).default('size'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(50),

@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TopListChart } from '@/components/charts';
 import { EmptyState } from '@/components/library';
 import { useLibraryCodecs } from '@/hooks/queries';
-import type { CodecBreakdown } from '@tracearr/shared';
+import { formatMediaTech, type CodecBreakdown } from '@tracearr/shared';
 
 interface CodecDistributionSectionProps {
   serverId?: string | null;
@@ -17,7 +17,7 @@ interface CodecDistributionSectionProps {
 function toChartData(breakdown: CodecBreakdown | undefined) {
   if (!breakdown?.codecs) return undefined;
   return breakdown.codecs.map((item) => ({
-    name: item.codec,
+    name: formatMediaTech(item.codec),
     value: item.count,
     subtitle: `${item.percentage}%`,
   }));

@@ -71,6 +71,8 @@ export const WS_EVENTS = {
   MAINTENANCE_PROGRESS: 'maintenance:progress',
   /** Library sync progress updates */
   LIBRARY_SYNC_PROGRESS: 'library:sync:progress',
+  /** Unified running tasks updates */
+  TASKS_UPDATED: 'tasks:updated',
   SUBSCRIBE_SESSIONS: 'subscribe:sessions',
   UNSUBSCRIBE_SESSIONS: 'unsubscribe:sessions',
   VERSION_UPDATE: 'version:update',
@@ -348,6 +350,126 @@ export function formatBitrate(kbps: number | null | undefined): string {
   }
   // kbps
   return `${kbps} kbps`;
+}
+
+/**
+ * Display names for video/audio tech strings (resolution, codecs, dynamic range).
+ * Keys are lowercase, values are proper display casing.
+ */
+const MEDIA_TECH_DISPLAY: Record<string, string> = {
+  // Resolution
+  '4k': '4K',
+  '2k': '2K',
+  uhd: 'UHD',
+  sd: 'SD',
+  hd: 'HD',
+  '1080p': '1080p',
+  '720p': '720p',
+  '480p': '480p',
+  // Dynamic range
+  sdr: 'SDR',
+  hdr: 'HDR',
+  hdr10: 'HDR10',
+  'hdr10+': 'HDR10+',
+  hlg: 'HLG',
+  'dolby vision': 'Dolby Vision',
+  dv: 'DV',
+  // Video codecs
+  hevc: 'HEVC',
+  h265: 'HEVC',
+  x265: 'HEVC',
+  h264: 'H.264',
+  avc: 'H.264',
+  x264: 'H.264',
+  av1: 'AV1',
+  vp9: 'VP9',
+  vp8: 'VP8',
+  'mpeg-4': 'MPEG-4',
+  mpeg4: 'MPEG-4',
+  'mpeg-2': 'MPEG-2',
+  mpeg2: 'MPEG-2',
+  mpeg2video: 'MPEG-2',
+  'mpeg-1': 'MPEG-1',
+  mpeg1: 'MPEG-1',
+  'vc-1': 'VC-1',
+  vc1: 'VC-1',
+  wmv: 'WMV',
+  theora: 'Theora',
+  prores: 'ProRes',
+  dnxhd: 'DNxHD',
+  // Audio codecs
+  aac: 'AAC',
+  ac3: 'AC3',
+  'ac-3': 'AC3',
+  eac3: 'EAC3',
+  'e-ac-3': 'EAC3',
+  truehd: 'TrueHD',
+  atmos: 'Atmos',
+  dts: 'DTS',
+  dca: 'DTS',
+  'dts-hd': 'DTS-HD',
+  'dts-hd ma': 'DTS-HD MA',
+  'dca-ma': 'DTS-HD MA',
+  'dts-hd hra': 'DTS-HD HRA',
+  'dts:x': 'DTS:X',
+  dtsx: 'DTS:X',
+  flac: 'FLAC',
+  alac: 'ALAC',
+  mp2: 'MP2',
+  mp3: 'MP3',
+  opus: 'Opus',
+  vorbis: 'Vorbis',
+  pcm: 'PCM',
+  lpcm: 'PCM',
+  pcm_s16le: 'PCM',
+  pcm_s24le: 'PCM',
+  pcm_s32le: 'PCM',
+  aiff: 'AIFF',
+  wav: 'WAV',
+  wma: 'WMA',
+  wmav2: 'WMA',
+  wmapro: 'WMA Pro',
+  // Container formats
+  mkv: 'MKV',
+  matroska: 'MKV',
+  mp4: 'MP4',
+  avi: 'AVI',
+  mov: 'MOV',
+  webm: 'WebM',
+  flv: 'FLV',
+  ts: 'TS',
+  m2ts: 'M2TS',
+  mpegts: 'MPEG-TS',
+  // Subtitle formats
+  srt: 'SRT',
+  ass: 'ASS',
+  ssa: 'SSA',
+  pgs: 'PGS',
+  vobsub: 'VobSub',
+  dvdsub: 'DVD Sub',
+  webvtt: 'WebVTT',
+  vtt: 'VTT',
+  eia_608: 'EIA-608',
+  cc: 'CC',
+};
+
+/**
+ * Format a media tech string (resolution, codec, dynamic range) for display.
+ * Uses a lookup map for known values, falls back to uppercase for unknown.
+ *
+ * @param value - Tech string (e.g., "4k", "hevc", "truehd", "dolby vision")
+ * @returns Formatted string with proper casing
+ *
+ * @example
+ * formatMediaTech("4k")           // "4K"
+ * formatMediaTech("hevc")         // "HEVC"
+ * formatMediaTech("truehd")       // "TrueHD"
+ * formatMediaTech("dolby vision") // "Dolby Vision"
+ */
+export function formatMediaTech(value: string | null | undefined): string {
+  if (!value) return 'Unknown';
+  const lower = value.toLowerCase().trim();
+  return MEDIA_TECH_DISPLAY[lower] ?? value.toUpperCase();
 }
 
 // Time constants in milliseconds (avoid magic numbers)

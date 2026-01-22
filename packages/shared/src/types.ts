@@ -744,6 +744,7 @@ export interface ServerToClientEvents {
   'import:jellystat:progress': (progress: JellystatImportProgress) => void;
   'maintenance:progress': (progress: MaintenanceJobProgress) => void;
   'library:sync:progress': (progress: LibrarySyncProgress) => void;
+  'tasks:updated': (tasks: RunningTask[]) => void;
   'version:update': (data: { current: string; latest: string; releaseUrl: string }) => void;
   'server:down': (data: { serverId: string; serverName: string }) => void;
   'server:up': (data: { serverId: string; serverName: string }) => void;
@@ -1276,6 +1277,39 @@ export interface MaintenanceJobResult {
   errors: number;
   durationMs: number;
   message: string;
+}
+
+// =============================================================================
+// Running Tasks Types (unified task status for UI)
+// =============================================================================
+
+export type RunningTaskType =
+  | 'library_sync'
+  | 'tautulli_import'
+  | 'jellystat_import'
+  | 'maintenance';
+
+export interface RunningTask {
+  /** Unique task identifier */
+  id: string;
+  /** Task type for categorization */
+  type: RunningTaskType;
+  /** Human-readable task name */
+  name: string;
+  /** Current status */
+  status: 'pending' | 'running' | 'complete' | 'error';
+  /** Progress percentage (0-100), null if indeterminate */
+  progress: number | null;
+  /** Current status message */
+  message: string;
+  /** When the task started */
+  startedAt: string;
+  /** Additional context (e.g., server name, job type) */
+  context?: string;
+}
+
+export interface RunningTasksResponse {
+  tasks: RunningTask[];
 }
 
 // =============================================================================

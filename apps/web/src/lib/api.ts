@@ -65,6 +65,7 @@ import type {
   TopShowsResponse,
   LibraryCodecsResponse,
   LibraryResolutionResponse,
+  RunningTasksResponse,
 } from '@tracearr/shared';
 
 // Re-export shared types needed by frontend components
@@ -987,7 +988,7 @@ class ApiClient {
       page: number = 1,
       pageSize: number = 20,
       mediaType?: 'movie' | 'show' | 'artist',
-      sortBy: 'size' | 'title' | 'days_stale' = 'size',
+      sortBy: 'size' | 'title' | 'days_stale' | 'added_at' = 'size',
       sortOrder: 'asc' | 'desc' = 'desc'
     ) => {
       const params = new URLSearchParams();
@@ -1357,6 +1358,11 @@ class ApiClient {
     get: () => this.request<VersionInfo>('/version'),
     check: () =>
       this.request<{ message: string }>('/version/check', { method: 'POST', body: '{}' }),
+  };
+
+  // Running tasks
+  tasks = {
+    getRunning: () => this.request<RunningTasksResponse>('/tasks/running'),
   };
 }
 

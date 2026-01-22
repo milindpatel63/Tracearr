@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Archive, Film, Tv, Music, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import type { StaleResponse } from '@tracearr/shared';
+import { formatMediaTech, type StaleResponse } from '@tracearr/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -24,7 +24,7 @@ import { useLibraryStale } from '@/hooks/queries/useLibrary';
 import { EmptyState } from '@/components/library';
 
 type MediaTypeFilter = 'all' | 'movie' | 'show' | 'artist';
-type SortBy = 'size' | 'title' | 'days_stale';
+type SortBy = 'size' | 'title' | 'days_stale' | 'added_at';
 type SortOrder = 'asc' | 'desc';
 
 /**
@@ -173,7 +173,8 @@ export function StaleContentTabs({ serverId, libraryId }: StaleContentTabsProps)
     data: StaleResponse | undefined,
     isLoading: boolean,
     page: number,
-    onPageChange: (page: number) => void
+    onPageChange: (page: number) => void,
+    showStaleColumn: boolean
   ) => {
     if (isLoading) {
       return (
@@ -200,6 +201,7 @@ export function StaleContentTabs({ serverId, libraryId }: StaleContentTabsProps)
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[60px]">Type</TableHead>
               <TableHead>
                 <button
                   className="hover:text-foreground flex items-center gap-1"
@@ -235,8 +237,42 @@ export function StaleContentTabs({ serverId, libraryId }: StaleContentTabsProps)
                   )}
                 </button>
               </TableHead>
-              <TableHead>Added</TableHead>
-              <TableHead>Stale For</TableHead>
+              <TableHead>
+                <button
+                  className="hover:text-foreground flex items-center gap-1"
+                  onClick={() => handleSort('added_at')}
+                >
+                  Added
+                  {sortBy === 'added_at' ? (
+                    sortOrder === 'asc' ? (
+                      <ArrowUp className="h-4 w-4" />
+                    ) : (
+                      <ArrowDown className="h-4 w-4" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="h-4 w-4 opacity-50" />
+                  )}
+                </button>
+              </TableHead>
+              {showStaleColumn && (
+                <TableHead>
+                  <button
+                    className="hover:text-foreground flex items-center gap-1"
+                    onClick={() => handleSort('days_stale')}
+                  >
+                    Stale For
+                    {sortBy === 'days_stale' ? (
+                      sortOrder === 'asc' ? (
+                        <ArrowUp className="h-4 w-4" />
+                      ) : (
+                        <ArrowDown className="h-4 w-4" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-4 w-4 opacity-50" />
+                    )}
+                  </button>
+                </TableHead>
+              )}
               <TableHead>Quality</TableHead>
             </TableRow>
           </TableHeader>
@@ -244,15 +280,11 @@ export function StaleContentTabs({ serverId, libraryId }: StaleContentTabsProps)
             {data.items.map((item) => (
               <TableRow key={item.id}>
                 <TableCell>
-                  <div className="flex items-center gap-2">
-                    <MediaTypeBadge mediaType={item.mediaType} />
-                    <div>
-                      <span className="font-medium">{item.title}</span>
-                      {item.year && (
-                        <span className="text-muted-foreground ml-1">({item.year})</span>
-                      )}
-                    </div>
-                  </div>
+                  <MediaTypeBadge mediaType={item.mediaType} />
+                </TableCell>
+                <TableCell>
+                  <span className="font-medium">{item.title}</span>
+                  {item.year && <span className="text-muted-foreground ml-1">({item.year})</span>}
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline">{item.serverName}</Badge>
@@ -261,11 +293,13 @@ export function StaleContentTabs({ serverId, libraryId }: StaleContentTabsProps)
                 <TableCell className="text-muted-foreground">
                   {formatDistanceToNow(new Date(item.addedAt), { addSuffix: true })}
                 </TableCell>
-                <TableCell>
-                  <StaleBadge daysStale={item.daysStale} />
-                </TableCell>
+                {showStaleColumn && (
+                  <TableCell>
+                    <StaleBadge daysStale={item.daysStale} />
+                  </TableCell>
+                )}
                 <TableCell className="text-muted-foreground">
-                  {item.resolution ?? 'Unknown'}
+                  {formatMediaTech(item.resolution)}
                 </TableCell>
               </TableRow>
             ))}
@@ -353,11 +387,12 @@ export function StaleContentTabs({ serverId, libraryId }: StaleContentTabsProps)
           neverWatched.data,
           neverWatched.isLoading,
           neverWatchedPage,
-          setNeverWatchedPage
+          setNeverWatchedPage,
+          false
         )}
       </TabsContent>
       <TabsContent value="stale">
-        {renderTable(stale.data, stale.isLoading, stalePage, setStalePage)}
+        {renderTable(stale.data, stale.isLoading, stalePage, setStalePage, true)}
       </TabsContent>
     </Tabs>
   );

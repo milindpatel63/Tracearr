@@ -1,4 +1,5 @@
 import { Smartphone, Monitor, CheckCircle2, ArrowRightLeft, Users } from 'lucide-react';
+import { formatMediaTech } from '@tracearr/shared';
 import { Link } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { StatCard } from '@/components/ui/stat-card';
@@ -208,7 +209,8 @@ export function StatsDevices() {
                       <TableCell>
                         <div className="font-medium">{hotspot.device}</div>
                         <div className="text-muted-foreground text-xs">
-                          {hotspot.videoCodec.toUpperCase()} + {hotspot.audioCodec.toUpperCase()}
+                          {formatMediaTech(hotspot.videoCodec)} +{' '}
+                          {formatMediaTech(hotspot.audioCodec)}
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-mono">
@@ -258,7 +260,7 @@ export function StatsDevices() {
                   <TableHead className="bg-background sticky left-0 z-10">Device</TableHead>
                   {activeCodecs.map((codec) => (
                     <TableHead key={codec} className="min-w-[80px] text-center">
-                      {codec.toUpperCase()}
+                      {formatMediaTech(codec)}
                     </TableHead>
                   ))}
                 </TableRow>

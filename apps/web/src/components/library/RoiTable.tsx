@@ -169,6 +169,7 @@ export function RoiTable({
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-[60px]">Type</TableHead>
             <TableHead>
               <button
                 className="hover:text-foreground flex items-center gap-1"
@@ -204,13 +205,11 @@ export function RoiTable({
           {data.items.map((item) => (
             <TableRow key={item.id}>
               <TableCell>
-                <div className="flex items-center gap-2">
-                  <MediaTypeBadge mediaType={item.mediaType} />
-                  <div>
-                    <span className="font-medium">{item.title}</span>
-                    {item.year && <span className="text-muted-foreground ml-1">({item.year})</span>}
-                  </div>
-                </div>
+                <MediaTypeBadge mediaType={item.mediaType} />
+              </TableCell>
+              <TableCell>
+                <span className="font-medium">{item.title}</span>
+                {item.year && <span className="text-muted-foreground ml-1">({item.year})</span>}
               </TableCell>
               <TableCell>{item.fileSizeGb.toFixed(1)} GB</TableCell>
               <TableCell>{item.totalWatchHours.toFixed(1)}</TableCell>

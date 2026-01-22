@@ -1,6 +1,6 @@
 import { useState, Fragment } from 'react';
 import { ChevronRight, Copy } from 'lucide-react';
-import type { DuplicatesResponse } from '@tracearr/shared';
+import { formatMediaTech, type DuplicatesResponse } from '@tracearr/shared';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -138,7 +138,7 @@ export function DuplicatesTable({ data, isLoading, page, onPageChange }: Duplica
                                   <div className="flex items-center gap-3">
                                     <Badge variant="outline">{item.serverName}</Badge>
                                     <span className="text-muted-foreground">
-                                      {item.resolution ?? 'Unknown'}
+                                      {formatMediaTech(item.resolution)}
                                     </span>
                                   </div>
                                   <span className="text-muted-foreground">

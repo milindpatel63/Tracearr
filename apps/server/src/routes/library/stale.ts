@@ -161,6 +161,7 @@ export const libraryStaleRoute: FastifyPluginAsync = async (app) => {
         size: 'file_size',
         days_stale: 'days_stale',
         title: 'title',
+        added_at: 'added_at',
       };
       const sortColumnName = sortColumnMap[sortBy] || 'file_size';
       const sortDirStr = sortOrder === 'asc' ? 'ASC NULLS LAST' : 'DESC NULLS FIRST';

@@ -82,6 +82,10 @@ export type {
   MaintenanceJobStatus,
   MaintenanceJobProgress,
   MaintenanceJobResult,
+  // Running tasks
+  RunningTaskType,
+  RunningTask,
+  RunningTasksResponse,
   // WebSocket
   ServerToClientEvents,
   ClientToServerEvents,
@@ -360,6 +364,7 @@ export {
   formatDistance,
   formatSpeed,
   formatBitrate,
+  formatMediaTech,
   getDistanceUnit,
   getSpeedUnit,
   toMetricDistance,

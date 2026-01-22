@@ -318,6 +318,41 @@ export async function getLibrarySyncStatus(
 }
 
 /**
+ * Get all active/pending library sync jobs
+ */
+export async function getAllActiveLibrarySyncs(): Promise<
+  Array<{
+    jobId: string;
+    serverId: string;
+    triggeredBy: 'manual' | 'scheduled';
+    state: string;
+    progress: number | null;
+    createdAt: number;
+  }>
+> {
+  if (!librarySyncQueue) {
+    return [];
+  }
+
+  const jobs = await librarySyncQueue.getJobs(['active', 'waiting', 'delayed']);
+
+  return Promise.all(
+    jobs.map(async (job) => {
+      const state = await job.getState();
+      const progress = job.progress;
+      return {
+        jobId: job.id ?? 'unknown',
+        serverId: job.data.serverId,
+        triggeredBy: job.data.triggeredBy,
+        state,
+        progress: typeof progress === 'number' ? progress : null,
+        createdAt: job.timestamp ?? Date.now(),
+      };
+    })
+  );
+}
+
+/**
  * Gracefully shutdown the library sync queue
  */
 export async function shutdownLibrarySyncQueue(): Promise<void> {

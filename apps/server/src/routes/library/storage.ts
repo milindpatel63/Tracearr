@@ -2,6 +2,9 @@
  * Library Storage Analytics Route
  *
  * GET /storage - Storage usage, trends, and linear regression predictions
+ *
+ * Uses library_items.file_size and created_at for accurate storage tracking
+ * based on when items were actually added to the media server.
  */
 
 import type { FastifyPluginAsync } from 'fastify';
@@ -15,7 +18,7 @@ import {
 } from '@tracearr/shared';
 import { db } from '../../db/client.js';
 import { validateServerAccess } from '../../utils/serverFiltering.js';
-import { buildLibraryServerFilter, buildLibraryCacheKey } from './utils.js';
+import { buildLibraryCacheKey } from './utils.js';
 
 // ============================================================================
 // Linear Regression Implementation
@@ -167,6 +170,9 @@ export const libraryStorageRoute: FastifyPluginAsync = async (app) => {
    *
    * Returns current storage usage, historical trend, growth rate,
    * and linear regression predictions for future storage needs.
+   *
+   * Calculates storage from library_items.file_size and created_at
+   * for accurate tracking based on when items were added.
    */
   app.get<{ Querystring: LibraryStorageQueryInput }>(
     '/storage',
@@ -205,35 +211,93 @@ export const libraryStorageRoute: FastifyPluginAsync = async (app) => {
 
       // Calculate date range
       const startDate = getStartDate(period);
+      const endDate = new Date();
 
-      // Build server filter
-      const serverFilter = buildLibraryServerFilter(serverId, authUser);
+      // Build server filter for library_items table
+      const serverFilter = serverId
+        ? sql`AND li.server_id = ${serverId}::uuid`
+        : authUser.serverIds?.length
+          ? sql`AND li.server_id = ANY(${authUser.serverIds}::uuid[])`
+          : sql``;
 
       // Optional library filter
-      const libraryFilter = libraryId ? sql`AND library_id = ${libraryId}` : sql``;
+      const libraryFilter = libraryId ? sql`AND li.library_id = ${libraryId}` : sql``;
 
-      // Date filter (only if not 'all')
-      const dateFilter = startDate ? sql`AND day >= ${startDate.toISOString()}::date` : sql``;
+      // For 'all' period, find the earliest item date from the database
+      let effectiveStartDate: Date;
+      if (startDate) {
+        effectiveStartDate = startDate;
+      } else {
+        // Query for the earliest created_at date
+        const earliestResult = await db.execute(sql`
+          SELECT MIN(created_at)::date AS earliest
+          FROM library_items li
+          WHERE li.file_size IS NOT NULL
+            ${serverFilter}
+            ${libraryFilter}
+        `);
+        const earliest = (earliestResult.rows[0] as { earliest: string | null })?.earliest;
+        effectiveStartDate = earliest ? new Date(earliest) : new Date('2020-01-01');
+      }
 
-      // Query library_stats_daily aggregate for historical data
+      // Query with continuous date series for cumulative storage calculation
+      // Similar to library growth, but summing file_size instead of counting items
       const result = await db.execute(sql`
+        WITH date_series AS (
+          -- Generate all dates in the range
+          SELECT d::date AS day
+          FROM generate_series(
+            ${effectiveStartDate.toISOString()}::date,
+            ${endDate.toISOString()}::date,
+            '1 day'::interval
+          ) d
+        ),
+        storage_before_period AS (
+          -- Sum of file sizes for items added BEFORE the period
+          SELECT COALESCE(SUM(li.file_size), 0)::bigint AS bytes_before
+          FROM library_items li
+          WHERE li.file_size IS NOT NULL
+            ${serverFilter}
+            ${libraryFilter}
+            AND li.created_at < ${effectiveStartDate.toISOString()}::timestamptz
+        ),
+        daily_additions AS (
+          -- Sum of file sizes added per day
+          SELECT
+            DATE(li.created_at AT TIME ZONE ${tz}) AS day,
+            SUM(li.file_size)::bigint AS bytes_added,
+            COUNT(*)::int AS items_added
+          FROM library_items li
+          WHERE li.file_size IS NOT NULL
+            ${serverFilter}
+            ${libraryFilter}
+            AND li.created_at >= ${effectiveStartDate.toISOString()}::timestamptz
+          GROUP BY 1
+        ),
+        filled_data AS (
+          -- Join grid with actual data, fill nulls with 0
+          SELECT
+            ds.day,
+            COALESCE(da.bytes_added, 0)::bigint AS bytes_added,
+            COALESCE(da.items_added, 0)::int AS items_added
+          FROM date_series ds
+          LEFT JOIN daily_additions da ON da.day = ds.day
+        )
         SELECT
-          day::text AS day,
-          COALESCE(SUM(total_size_bytes), 0)::bigint AS total_size_bytes,
-          COALESCE(SUM(total_items), 0)::int AS total_items
-        FROM library_stats_daily
-        WHERE true
-          ${serverFilter}
-          ${libraryFilter}
-          ${dateFilter}
-        GROUP BY day
-        ORDER BY day ASC
+          fd.day::text,
+          (sbp.bytes_before + SUM(fd.bytes_added) OVER (ORDER BY fd.day))::bigint AS total_size_bytes,
+          fd.bytes_added,
+          fd.items_added
+        FROM filled_data fd
+        CROSS JOIN storage_before_period sbp
+        ORDER BY fd.day ASC
       `);
 
       const rows = result.rows as Array<{
         day: string;
         total_size_bytes: string;
-        total_items: number;
+        bytes_added: string;
+        items_added: number;
       }>;
 
       // Build history array
@@ -244,9 +308,20 @@ export const libraryStorageRoute: FastifyPluginAsync = async (app) => {
 
       // Get current stats (latest day)
       const latestRow = rows.length > 0 ? rows[rows.length - 1] : null;
+
+      // Get total item count (current library size with file_size)
+      const countResult = await db.execute(sql`
+        SELECT COUNT(*)::int AS total_items
+        FROM library_items li
+        WHERE li.file_size IS NOT NULL
+          ${serverFilter}
+          ${libraryFilter}
+      `);
+      const totalItems = (countResult.rows[0] as { total_items: number })?.total_items ?? 0;
+
       const current = {
         totalSizeBytes: latestRow?.total_size_bytes ?? '0',
-        totalItems: latestRow?.total_items ?? 0,
+        totalItems,
         lastUpdated: latestRow?.day ?? null,
       };
 

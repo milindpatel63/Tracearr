@@ -119,7 +119,7 @@ export function useLibraryStale(
   page: number = 1,
   pageSize: number = 20,
   mediaType?: 'movie' | 'show' | 'artist',
-  sortBy: 'size' | 'title' | 'days_stale' = 'size',
+  sortBy: 'size' | 'title' | 'days_stale' | 'added_at' = 'size',
   sortOrder: 'asc' | 'desc' = 'desc'
 ) {
   return useQuery<StaleResponse>({

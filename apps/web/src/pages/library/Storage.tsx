@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { HardDrive, TrendingUp, Copy, Archive } from 'lucide-react';
 import { StatCard } from '@/components/ui/stat-card';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { TimeRangePicker } from '@/components/ui/time-range-picker';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import {
   ErrorState,
   EmptyState,
@@ -18,30 +21,39 @@ import {
   useLibraryRoi,
 } from '@/hooks/queries';
 import { useServer } from '@/hooks/useServer';
+import { useTimeRange } from '@/hooks/useTimeRange';
+
+const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'] as const;
 
 /**
- * Format bytes to human-readable size (TB/GB)
+ * Format bytes to human-readable size (B through PB)
  * Handles string (BigInt) or number values from API
  */
-function formatBytes(bytesStr: string | number | null | undefined): string {
-  if (!bytesStr) return '0 GB';
+function formatBytes(bytesStr: string | number | null | undefined, decimals = 1): string {
+  if (!bytesStr) return '0 B';
 
-  // Parse as BigInt for large values, convert to GB
-  const bytes = typeof bytesStr === 'string' ? BigInt(bytesStr) : BigInt(Math.floor(bytesStr));
-  const gb = Number(bytes / BigInt(1024 ** 3));
+  // Convert BigInt string to number - safe up to ~9 petabytes
+  const bytes = typeof bytesStr === 'string' ? Number(BigInt(bytesStr)) : Math.floor(bytesStr);
 
-  if (gb >= 1024) {
-    return `${(gb / 1024).toFixed(1)} TB`;
-  }
-  return `${gb.toFixed(1)} GB`;
+  if (bytes === 0) return '0 B';
+
+  const k = 1024;
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const value = bytes / Math.pow(k, i);
+
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: decimals })} ${BYTE_UNITS[i]}`;
 }
 
 export function LibraryStorage() {
   const { selectedServerId, servers } = useServer();
+  const { value: timeRange, setValue: setTimeRange } = useTimeRange();
 
   // Pagination state for tables
   const [duplicatesPage, setDuplicatesPage] = useState(1);
   const [roiPage, setRoiPage] = useState(1);
+
+  // Storage trend chart toggle
+  const [showPredictions, setShowPredictions] = useState(true);
 
   // ROI sorting and filtering state - default to high ROI first
   const [roiSortBy, setRoiSortBy] = useState<
@@ -50,8 +62,24 @@ export function LibraryStorage() {
   const [roiSortOrder, setRoiSortOrder] = useState<'asc' | 'desc'>('desc');
   const [roiMediaType, setRoiMediaType] = useState<'all' | 'movie' | 'show' | 'artist'>('all');
 
-  // Core data hooks - use all available history for storage trends
-  const storage = useLibraryStorage(selectedServerId, null, 'all');
+  // Map TimeRangePicker periods to API format
+  const apiPeriod = useMemo(() => {
+    switch (timeRange.period) {
+      case 'week':
+        return '7d';
+      case 'month':
+        return '30d';
+      case 'year':
+        return '1y';
+      case 'all':
+        return 'all';
+      default:
+        return '30d';
+    }
+  }, [timeRange.period]);
+
+  // Core data hooks - use time range for storage trends
+  const storage = useLibraryStorage(selectedServerId, null, apiPeriod);
   // Only fetch duplicates when multiple servers exist (cross-server feature)
   const hasMultipleServers = servers.length > 1;
   const duplicates = useLibraryDuplicates(selectedServerId, duplicatesPage, 10, hasMultipleServers);
@@ -158,25 +186,48 @@ export function LibraryStorage() {
       {/* Storage Trend & Predictions Chart */}
       <Card>
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base font-medium">Storage Trend</CardTitle>
-            {storage.data?.predictions.confidence && (
-              <Badge
-                variant={
-                  storage.data.predictions.confidence === 'high'
-                    ? 'success'
-                    : storage.data.predictions.confidence === 'medium'
-                      ? 'warning'
-                      : 'secondary'
-                }
-              >
-                {storage.data.predictions.confidence} confidence
-              </Badge>
-            )}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <CardTitle className="text-base font-medium">Storage Trend</CardTitle>
+              {showPredictions && storage.data?.predictions.confidence && (
+                <Badge
+                  variant={
+                    storage.data.predictions.confidence === 'high'
+                      ? 'success'
+                      : storage.data.predictions.confidence === 'medium'
+                        ? 'warning'
+                        : 'secondary'
+                  }
+                >
+                  {storage.data.predictions.confidence.charAt(0).toUpperCase() +
+                    storage.data.predictions.confidence.slice(1)}{' '}
+                  Confidence
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="show-predictions"
+                  checked={showPredictions}
+                  onCheckedChange={setShowPredictions}
+                />
+                <Label htmlFor="show-predictions" className="text-sm">
+                  Predictions
+                </Label>
+              </div>
+              <TimeRangePicker value={timeRange} onChange={setTimeRange} />
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          <StoragePredictionChart data={storage.data} isLoading={storage.isLoading} height={300} />
+          <StoragePredictionChart
+            data={storage.data}
+            isLoading={storage.isLoading}
+            height={300}
+            period={timeRange.period}
+            showPredictions={showPredictions}
+          />
         </CardContent>
       </Card>
 

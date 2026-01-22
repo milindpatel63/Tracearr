@@ -554,6 +554,41 @@ export async function cancelJellystatImport(jobId: string): Promise<boolean> {
 }
 
 /**
+ * Get all active/pending import jobs
+ */
+export async function getAllActiveImports(): Promise<
+  Array<{
+    jobId: string;
+    type: 'tautulli' | 'jellystat';
+    serverId: string;
+    state: string;
+    progress: number | object | null;
+    createdAt: number;
+  }>
+> {
+  if (!importQueue) {
+    return [];
+  }
+
+  const jobs = await importQueue.getJobs(['active', 'waiting', 'delayed']);
+
+  return Promise.all(
+    jobs.map(async (job) => {
+      const state = await job.getState();
+      const progress = job.progress;
+      return {
+        jobId: job.id ?? 'unknown',
+        type: job.data.type,
+        serverId: job.data.serverId,
+        state,
+        progress: typeof progress === 'number' || typeof progress === 'object' ? progress : null,
+        createdAt: job.timestamp ?? Date.now(),
+      };
+    })
+  );
+}
+
+/**
  * Gracefully shutdown
  */
 export async function shutdownImportQueue(): Promise<void> {

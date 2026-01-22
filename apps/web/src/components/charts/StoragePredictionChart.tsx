@@ -10,27 +10,79 @@ interface StoragePredictionChartProps {
   data: LibraryStorageResponse | undefined;
   isLoading?: boolean;
   height?: number;
+  /** Time period for determining prediction range. 'all' hides predictions. */
+  period?: 'day' | 'week' | 'month' | 'year' | 'all' | 'custom';
+  /** Whether to show predictions. When false, historical takes full chart. */
+  showPredictions?: boolean;
 }
 
-// Convert bytes string to GB using BigInt for precision
-function bytesToGb(bytes: string): number {
-  return Number(BigInt(bytes) / BigInt(1024 ** 3));
+const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'] as const;
+
+/**
+ * Determine the best unit for displaying a range of byte values.
+ * Returns the unit index and divisor.
+ */
+function getBestUnit(maxBytes: number): { unitIndex: number; divisor: number } {
+  if (maxBytes === 0) return { unitIndex: 3, divisor: 1024 ** 3 }; // Default to GB
+  const k = 1024;
+  const unitIndex = Math.min(Math.floor(Math.log(maxBytes) / Math.log(k)), BYTE_UNITS.length - 1);
+  return { unitIndex, divisor: Math.pow(k, unitIndex) };
+}
+
+/**
+ * Convert bytes string to a number in the specified unit.
+ */
+function bytesToUnit(bytes: string, divisor: number): number {
+  return Number(BigInt(bytes)) / divisor;
 }
 
 export function StoragePredictionChart({
   data,
   isLoading,
   height = 300,
+  period = 'month',
+  showPredictions: showPredictionsProp = true,
 }: StoragePredictionChartProps) {
   const options = useMemo<Highcharts.Options>(() => {
     if (!data?.history || data.history.length === 0) {
       return {};
     }
 
-    // Convert historical data
+    // Determine prediction days based on period (matches historical range)
+    // 'all' and 'custom' hide predictions, or when explicitly disabled via prop
+    const showPredictions = showPredictionsProp && period !== 'all' && period !== 'custom';
+    const predictionDays =
+      period === 'day'
+        ? 1
+        : period === 'week'
+          ? 7
+          : period === 'month'
+            ? 30
+            : period === 'year'
+              ? 365
+              : 0;
+
+    // Find max value to determine best unit for display
+    const maxHistorical = Math.max(...data.history.map((d) => Number(BigInt(d.totalSizeBytes))));
+
+    // Only consider predictions for max if we're showing them
+    let maxPrediction = maxHistorical;
+    if (showPredictions && data.predictions.day365) {
+      maxPrediction = Number(BigInt(data.predictions.day365.max));
+    } else if (showPredictions && data.predictions.day90) {
+      maxPrediction = Number(BigInt(data.predictions.day90.max));
+    } else if (showPredictions && data.predictions.day30) {
+      maxPrediction = Number(BigInt(data.predictions.day30.max));
+    }
+
+    const maxValue = Math.max(maxHistorical, maxPrediction);
+    const { unitIndex, divisor } = getBestUnit(maxValue);
+    const unitLabel = BYTE_UNITS[unitIndex];
+
+    // Convert historical data to chosen unit
     const historicalData = data.history.map((d) => ({
       x: new Date(d.day).getTime(),
-      y: bytesToGb(d.totalSizeBytes),
+      y: bytesToUnit(d.totalSizeBytes, divisor),
     }));
 
     const lastHistoricalPoint = historicalData[historicalData.length - 1];
@@ -39,26 +91,36 @@ export function StoragePredictionChart({
     }
     const lastHistoricalDate = lastHistoricalPoint.x;
 
-    // Build prediction data points
+    // Build prediction data points (only if not 'all')
     const predictionPoints: { x: number; y: number; low: number; high: number }[] = [];
     const predictions = data.predictions;
 
     // Start prediction line from last historical point
     const predictionLineData: [number, number][] = [[lastHistoricalDate, lastHistoricalPoint.y]];
 
-    // Only add predictions if they exist
-    const dayOffsets = [
-      { days: 30, prediction: predictions.day30 },
-      { days: 90, prediction: predictions.day90 },
-      { days: 365, prediction: predictions.day365 },
-    ];
+    // Only add predictions if we're showing them and they exist
+    if (showPredictions && predictionDays > 0) {
+      const bytesPerDay = Number(data.growthRate.bytesPerDay);
+      const currentBytes = Number(BigInt(data.current.totalSizeBytes));
+      const confidence = predictions.confidence;
+      const marginPercent = confidence === 'high' ? 0.1 : confidence === 'medium' ? 0.25 : 0.5;
+      const msPerDay = 24 * 60 * 60 * 1000;
 
-    for (const { days, prediction } of dayOffsets) {
-      if (prediction) {
-        const timestamp = lastHistoricalDate + days * 24 * 60 * 60 * 1000;
-        const predicted = bytesToGb(prediction.predicted);
-        const min = bytesToGb(prediction.min);
-        const max = bytesToGb(prediction.max);
+      // Match prediction point granularity to X-axis tick intervals
+      // year = monthly (~12 points), month = every 2 days (~15 points), week = daily (7 points)
+      const intervalDays = period === 'year' ? 30 : period === 'month' ? 2 : 1;
+      const numPoints = Math.ceil(predictionDays / intervalDays);
+
+      for (let i = 1; i <= numPoints; i++) {
+        const daysOut = Math.min(i * intervalDays, predictionDays);
+        const predictedBytes = currentBytes + bytesPerDay * daysOut;
+        // Margin grows with time (uncertainty increases)
+        const margin = predictedBytes * marginPercent * (daysOut / predictionDays);
+
+        const timestamp = lastHistoricalDate + daysOut * msPerDay;
+        const predicted = predictedBytes / divisor;
+        const min = Math.max(0, predictedBytes - margin) / divisor;
+        const max = (predictedBytes + margin) / divisor;
 
         predictionPoints.push({ x: timestamp, y: predicted, low: min, high: max });
         predictionLineData.push([timestamp, predicted]);
@@ -194,7 +256,7 @@ export function StoragePredictionChart({
       },
       yAxis: {
         title: {
-          text: 'Storage (GB)',
+          text: `Storage (${unitLabel})`,
           style: {
             color: 'hsl(var(--muted-foreground))',
           },
@@ -204,7 +266,7 @@ export function StoragePredictionChart({
             color: 'hsl(var(--muted-foreground))',
           },
           formatter: function () {
-            return `${this.value?.toLocaleString()} GB`;
+            return `${this.value?.toLocaleString()} ${unitLabel}`;
           },
         },
         gridLineColor: 'hsl(var(--border))',
@@ -233,9 +295,9 @@ export function StoragePredictionChart({
             if (point.series.type === 'arearange') {
               // Show range for confidence band - access low/high from the point
               const rangePoint = point as unknown as { low: number; high: number; color: string };
-              html += `<br/><span style="color:${point.color}">●</span> Range: ${rangePoint.low?.toFixed(1)} - ${rangePoint.high?.toFixed(1)} GB`;
+              html += `<br/><span style="color:${point.color}">●</span> Range: ${rangePoint.low?.toFixed(1)} - ${rangePoint.high?.toFixed(1)} ${unitLabel}`;
             } else {
-              html += `<br/><span style="color:${point.color}">●</span> ${point.series.name}: ${point.y?.toFixed(1)} GB`;
+              html += `<br/><span style="color:${point.color}">●</span> ${point.series.name}: ${point.y?.toFixed(1)} ${unitLabel}`;
             }
           }
           return html;
@@ -284,7 +346,7 @@ export function StoragePredictionChart({
         ],
       },
     };
-  }, [data, height]);
+  }, [data, height, period, showPredictionsProp]);
 
   if (isLoading) {
     return <ChartSkeleton height={height} />;

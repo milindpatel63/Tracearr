@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import {
   formatBitrate,
+  formatMediaTech,
   type SourceVideoDetails,
   type SourceAudioDetails,
   type StreamVideoDetails,
@@ -132,31 +133,10 @@ function getDecisionBadge(decision: string | null): {
   }
 }
 
-// Format codec name for display (uppercase common codecs)
+// Format codec name for display, returning em dash for null/undefined
 function formatCodec(codec: string | null | undefined): string {
   if (!codec) return '—';
-  const upper = codec.toUpperCase();
-  // Keep common codecs uppercase
-  if (
-    [
-      'H264',
-      'H265',
-      'HEVC',
-      'AV1',
-      'VP9',
-      'AAC',
-      'AC3',
-      'EAC3',
-      'DTS',
-      'TRUEHD',
-      'FLAC',
-      'OPUS',
-    ].includes(upper)
-  ) {
-    return upper;
-  }
-  // Title case for others
-  return codec.charAt(0).toUpperCase() + codec.slice(1);
+  return formatMediaTech(codec);
 }
 
 function formatTranscodeReason(reason: string): string {
@@ -316,11 +296,10 @@ export function StreamDetailsPanel({
         <>
           <ComparisonRow
             label="Container"
-            sourceValue={transcodeInfo.sourceContainer.toUpperCase()}
-            streamValue={
-              transcodeInfo.streamContainer?.toUpperCase() ??
-              transcodeInfo.sourceContainer.toUpperCase()
-            }
+            sourceValue={formatMediaTech(transcodeInfo.sourceContainer)}
+            streamValue={formatMediaTech(
+              transcodeInfo.streamContainer ?? transcodeInfo.sourceContainer
+            )}
           />
           <Separator />
         </>
@@ -383,8 +362,10 @@ export function StreamDetailsPanel({
               {sourceVideoDetails?.dynamicRange && (
                 <ComparisonRow
                   label="HDR"
-                  sourceValue={sourceVideoDetails.dynamicRange}
-                  streamValue={streamVideoDetails?.dynamicRange ?? sourceVideoDetails.dynamicRange}
+                  sourceValue={formatMediaTech(sourceVideoDetails.dynamicRange)}
+                  streamValue={formatMediaTech(
+                    streamVideoDetails?.dynamicRange ?? sourceVideoDetails.dynamicRange
+                  )}
                 />
               )}
               {sourceVideoDetails?.profile && (

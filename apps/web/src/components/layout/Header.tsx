@@ -14,6 +14,7 @@ import { ModeToggle } from '@/components/ui/mode-toggle';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/hooks/useAuth';
+import { RunningTasksDropdown } from './RunningTasksDropdown';
 
 export function Header() {
   const { user, logout } = useAuth();
@@ -34,6 +35,7 @@ export function Header() {
 
       <div className="flex items-center gap-4">
         <ModeToggle />
+        <RunningTasksDropdown />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full">
