@@ -13,6 +13,13 @@ import { db } from '../../db/client.js';
 import { sessions } from '../../db/schema.js';
 
 /**
+ * Maximum size for IN clause arrays to prevent PostgreSQL lock exhaustion.
+ * TimescaleDB with many chunks can exhaust max_locks_per_transaction when
+ * queries have large IN clauses that touch many partitions.
+ */
+const DEDUP_CHUNK_SIZE = 500;
+
+/**
  * Existing session data needed for deduplication decisions
  */
 export interface ExistingSession {
@@ -59,6 +66,9 @@ export interface DeduplicationConfig<T, TExternalId extends string | number> {
 
 /**
  * Query existing sessions by external IDs
+ *
+ * Chunks the query to avoid PostgreSQL lock exhaustion with large IN clauses.
+ * Each chunk runs in a separate query to minimize lock contention on TimescaleDB.
  */
 export async function queryExistingByExternalIds(
   serverId: string,
@@ -66,34 +76,43 @@ export async function queryExistingByExternalIds(
 ): Promise<Map<string, ExistingSession>> {
   if (externalIds.length === 0) return new Map();
 
-  const existing = await db
-    .select({
-      id: sessions.id,
-      externalSessionId: sessions.externalSessionId,
-      ratingKey: sessions.ratingKey,
-      startedAt: sessions.startedAt,
-      serverUserId: sessions.serverUserId,
-      totalDurationMs: sessions.totalDurationMs,
-      stoppedAt: sessions.stoppedAt,
-      durationMs: sessions.durationMs,
-      pausedDurationMs: sessions.pausedDurationMs,
-      watched: sessions.watched,
-      sourceVideoCodec: sessions.sourceVideoCodec,
-    })
-    .from(sessions)
-    .where(and(eq(sessions.serverId, serverId), inArray(sessions.externalSessionId, externalIds)));
-
   const map = new Map<string, ExistingSession>();
-  for (const s of existing) {
-    if (s.externalSessionId) {
-      map.set(s.externalSessionId, s);
+
+  // Process in chunks to avoid lock exhaustion
+  for (let i = 0; i < externalIds.length; i += DEDUP_CHUNK_SIZE) {
+    const chunk = externalIds.slice(i, i + DEDUP_CHUNK_SIZE);
+
+    const existing = await db
+      .select({
+        id: sessions.id,
+        externalSessionId: sessions.externalSessionId,
+        ratingKey: sessions.ratingKey,
+        startedAt: sessions.startedAt,
+        serverUserId: sessions.serverUserId,
+        totalDurationMs: sessions.totalDurationMs,
+        stoppedAt: sessions.stoppedAt,
+        durationMs: sessions.durationMs,
+        pausedDurationMs: sessions.pausedDurationMs,
+        watched: sessions.watched,
+        sourceVideoCodec: sessions.sourceVideoCodec,
+      })
+      .from(sessions)
+      .where(and(eq(sessions.serverId, serverId), inArray(sessions.externalSessionId, chunk)));
+
+    for (const s of existing) {
+      if (s.externalSessionId) {
+        map.set(s.externalSessionId, s);
+      }
     }
   }
+
   return map;
 }
 
 /**
  * Query existing sessions by time-based keys (fallback dedup)
+ *
+ * Chunks the query to avoid PostgreSQL lock exhaustion with large IN clauses.
  */
 export async function queryExistingByTimeKeys(
   serverId: string,
@@ -101,41 +120,50 @@ export async function queryExistingByTimeKeys(
 ): Promise<Map<string, ExistingSession>> {
   if (keys.length === 0) return new Map();
 
-  // Build a query that matches on ratingKey and serverUserId
-  // Then we filter by startedAt in memory for exact time matching
-  const existing = await db
-    .select({
-      id: sessions.id,
-      externalSessionId: sessions.externalSessionId,
-      ratingKey: sessions.ratingKey,
-      startedAt: sessions.startedAt,
-      serverUserId: sessions.serverUserId,
-      totalDurationMs: sessions.totalDurationMs,
-      stoppedAt: sessions.stoppedAt,
-      durationMs: sessions.durationMs,
-      pausedDurationMs: sessions.pausedDurationMs,
-      watched: sessions.watched,
-      sourceVideoCodec: sessions.sourceVideoCodec,
-    })
-    .from(sessions)
-    .where(
-      and(
-        eq(sessions.serverId, serverId),
-        inArray(
-          sessions.ratingKey,
-          keys.map((k) => k.ratingKey)
-        ),
-        inArray(sessions.serverUserId, [...new Set(keys.map((k) => k.serverUserId))])
-      )
-    );
-
   const map = new Map<string, ExistingSession>();
-  for (const s of existing) {
-    if (s.ratingKey && s.serverUserId && s.startedAt) {
-      const timeKey = `${s.serverUserId}:${s.ratingKey}:${s.startedAt.getTime()}`;
-      map.set(timeKey, s);
+
+  // Get unique ratingKeys and serverUserIds
+  const uniqueRatingKeys = [...new Set(keys.map((k) => k.ratingKey))];
+  const uniqueUserIds = [...new Set(keys.map((k) => k.serverUserId))];
+
+  // Process ratingKeys in chunks to avoid lock exhaustion
+  // (serverUserIds is typically much smaller, so we don't chunk it)
+  for (let i = 0; i < uniqueRatingKeys.length; i += DEDUP_CHUNK_SIZE) {
+    const ratingKeyChunk = uniqueRatingKeys.slice(i, i + DEDUP_CHUNK_SIZE);
+
+    // Build a query that matches on ratingKey and serverUserId
+    // Then we filter by startedAt in memory for exact time matching
+    const existing = await db
+      .select({
+        id: sessions.id,
+        externalSessionId: sessions.externalSessionId,
+        ratingKey: sessions.ratingKey,
+        startedAt: sessions.startedAt,
+        serverUserId: sessions.serverUserId,
+        totalDurationMs: sessions.totalDurationMs,
+        stoppedAt: sessions.stoppedAt,
+        durationMs: sessions.durationMs,
+        pausedDurationMs: sessions.pausedDurationMs,
+        watched: sessions.watched,
+        sourceVideoCodec: sessions.sourceVideoCodec,
+      })
+      .from(sessions)
+      .where(
+        and(
+          eq(sessions.serverId, serverId),
+          inArray(sessions.ratingKey, ratingKeyChunk),
+          inArray(sessions.serverUserId, uniqueUserIds)
+        )
+      );
+
+    for (const s of existing) {
+      if (s.ratingKey && s.serverUserId && s.startedAt) {
+        const timeKey = `${s.serverUserId}:${s.ratingKey}:${s.startedAt.getTime()}`;
+        map.set(timeKey, s);
+      }
     }
   }
+
   return map;
 }
 
