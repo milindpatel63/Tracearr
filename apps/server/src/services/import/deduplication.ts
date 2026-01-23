@@ -8,7 +8,7 @@
  * Used by both Tautulli and Jellystat importers.
  */
 
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, gte, lte } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import { sessions } from '../../db/schema.js';
 
@@ -113,6 +113,7 @@ export async function queryExistingByExternalIds(
  * Query existing sessions by time-based keys (fallback dedup)
  *
  * Chunks the query to avoid PostgreSQL lock exhaustion with large IN clauses.
+ * Uses time bounds derived from keys to enable TimescaleDB chunk exclusion.
  */
 export async function queryExistingByTimeKeys(
   serverId: string,
@@ -126,12 +127,19 @@ export async function queryExistingByTimeKeys(
   const uniqueRatingKeys = [...new Set(keys.map((k) => k.ratingKey))];
   const uniqueUserIds = [...new Set(keys.map((k) => k.serverUserId))];
 
+  // Compute time bounds from keys for TimescaleDB chunk exclusion
+  // Add buffer to handle timezone/precision edge cases
+  const TIME_BUFFER_MS = 60_000; // 1 minute buffer
+  const timestamps = keys.map((k) => k.startedAt.getTime());
+  const minTime = new Date(Math.min(...timestamps) - TIME_BUFFER_MS);
+  const maxTime = new Date(Math.max(...timestamps) + TIME_BUFFER_MS);
+
   // Process ratingKeys in chunks to avoid lock exhaustion
   // (serverUserIds is typically much smaller, so we don't chunk it)
   for (let i = 0; i < uniqueRatingKeys.length; i += DEDUP_CHUNK_SIZE) {
     const ratingKeyChunk = uniqueRatingKeys.slice(i, i + DEDUP_CHUNK_SIZE);
 
-    // Build a query that matches on ratingKey and serverUserId
+    // Build a query that matches on ratingKey, serverUserId, and time bounds
     // Then we filter by startedAt in memory for exact time matching
     const existing = await db
       .select({
@@ -152,7 +160,10 @@ export async function queryExistingByTimeKeys(
         and(
           eq(sessions.serverId, serverId),
           inArray(sessions.ratingKey, ratingKeyChunk),
-          inArray(sessions.serverUserId, uniqueUserIds)
+          inArray(sessions.serverUserId, uniqueUserIds),
+          // Time bounds enable TimescaleDB chunk exclusion
+          gte(sessions.startedAt, minTime),
+          lte(sessions.startedAt, maxTime)
         )
       );
 

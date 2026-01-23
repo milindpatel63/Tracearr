@@ -1000,36 +1000,44 @@ export class TautulliService {
     await flushBatches();
 
     // Link sessions using group_ids data (referenceId linking pass)
+    // Process in mega-chunks to avoid lock exhaustion from querying all IDs at once
     let linkedSessions = 0;
     if (sessionGroupLinks.length > 0) {
       progress.message = `Linking ${sessionGroupLinks.length} resume sessions...`;
       publishProgress(progress);
 
-      // Get unique parent external IDs to lookup
-      const parentExternalIds = [...new Set(sessionGroupLinks.map((l) => l.parentExternalId))];
-      const parentMap = await queryExistingByExternalIds(serverId, parentExternalIds);
+      // Process links in chunks to spread lock acquisition and reduce memory pressure
+      // Each mega-chunk queries only the parent/child IDs it needs
+      const LINK_MEGA_CHUNK_SIZE = 500;
+      const UPDATE_BATCH_SIZE = 50;
 
-      // Also get child external IDs to find their UUIDs for updating
-      const childExternalIds = sessionGroupLinks.map((l) => l.childExternalId);
-      const childMap = await queryExistingByExternalIds(serverId, childExternalIds);
+      for (let i = 0; i < sessionGroupLinks.length; i += LINK_MEGA_CHUNK_SIZE) {
+        const megaChunk = sessionGroupLinks.slice(i, i + LINK_MEGA_CHUNK_SIZE);
 
-      // Batch update child sessions with their referenceId
-      const UPDATE_CHUNK_SIZE = 50;
-      for (let i = 0; i < sessionGroupLinks.length; i += UPDATE_CHUNK_SIZE) {
-        const chunk = sessionGroupLinks.slice(i, i + UPDATE_CHUNK_SIZE);
-        await Promise.all(
-          chunk.map(async ({ childExternalId, parentExternalId }) => {
-            const parent = parentMap.get(parentExternalId);
-            const child = childMap.get(childExternalId);
-            if (parent && child) {
-              await db
-                .update(sessions)
-                .set({ referenceId: parent.id })
-                .where(eq(sessions.id, child.id));
-              linkedSessions++;
-            }
-          })
-        );
+        // Get unique parent/child IDs for this mega-chunk only
+        const chunkParentIds = [...new Set(megaChunk.map((l) => l.parentExternalId))];
+        const chunkChildIds = megaChunk.map((l) => l.childExternalId);
+
+        const parentMap = await queryExistingByExternalIds(serverId, chunkParentIds);
+        const childMap = await queryExistingByExternalIds(serverId, chunkChildIds);
+
+        // Batch updates within this mega-chunk
+        for (let j = 0; j < megaChunk.length; j += UPDATE_BATCH_SIZE) {
+          const updateBatch = megaChunk.slice(j, j + UPDATE_BATCH_SIZE);
+          await Promise.all(
+            updateBatch.map(async ({ childExternalId, parentExternalId }) => {
+              const parent = parentMap.get(parentExternalId);
+              const child = childMap.get(childExternalId);
+              if (parent && child) {
+                await db
+                  .update(sessions)
+                  .set({ referenceId: parent.id })
+                  .where(eq(sessions.id, child.id));
+                linkedSessions++;
+              }
+            })
+          );
+        }
       }
 
       if (linkedSessions > 0) {
