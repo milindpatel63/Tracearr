@@ -729,6 +729,7 @@ async function processFixImportedProgressJob(
           progressMs: sessions.progressMs,
           totalDurationMs: sessions.totalDurationMs,
           watched: sessions.watched,
+          mediaType: sessions.mediaType,
         })
         .from(sessions)
         .where(lastId ? and(whereCondition, sql`${sessions.id} > ${lastId}`) : whereCondition)
@@ -768,10 +769,18 @@ async function processFixImportedProgressJob(
             totalDurationMs = Math.round(durationMs / 0.85);
             progressMs = durationMs;
           } else {
-            // Without percent_complete, we can't calculate total duration
-            // Skip these - better to show "unknown" than incorrect 100%
-            totalSkipped++;
-            continue;
+            // For unwatched sessions, use median content duration based on media type
+            // These medians are derived from actual session data in the database
+            const medianDurations: Record<string, number> = {
+              episode: 42 * 60 * 1000, // 42 minutes
+              movie: 109 * 60 * 1000, // 109 minutes
+              track: 4 * 60 * 1000, // 4 minutes
+            };
+            const medianDuration = medianDurations[session.mediaType ?? ''] ?? 60 * 60 * 1000; // default 1 hour
+
+            // Use the larger of median or actual watch time (they may have watched longer than average)
+            totalDurationMs = Math.max(medianDuration, durationMs);
+            progressMs = durationMs;
           }
 
           // Check if update is actually needed

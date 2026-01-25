@@ -9,7 +9,7 @@
  * 5. Report progress via callback for real-time updates
  */
 
-import { eq, and, inArray, sql } from 'drizzle-orm';
+import { eq, and, inArray, sql, gte, lt } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { servers, libraryItems, librarySnapshots } from '../db/schema.js';
 import { createMediaServerClient, type MediaLibraryItem } from './mediaServer/index.js';
@@ -586,7 +586,58 @@ export class LibrarySyncService {
       }
     }
 
-    // Insert snapshot
+    // Check for existing snapshot today for this library
+    // Update it if exists (better data), otherwise insert new
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const [existing] = await db
+      .select({ id: librarySnapshots.id, itemCount: librarySnapshots.itemCount })
+      .from(librarySnapshots)
+      .where(
+        and(
+          eq(librarySnapshots.serverId, serverId),
+          eq(librarySnapshots.libraryId, libraryId),
+          gte(librarySnapshots.snapshotTime, today),
+          lt(librarySnapshots.snapshotTime, tomorrow)
+        )
+      )
+      .limit(1);
+
+    // Update existing snapshot if this one has more/better data, otherwise insert
+    if (existing && items.length >= existing.itemCount) {
+      await db
+        .update(librarySnapshots)
+        .set({
+          snapshotTime: new Date(),
+          itemCount: items.length,
+          totalSize,
+          movieCount,
+          episodeCount,
+          seasonCount,
+          showCount,
+          musicCount,
+          count4k,
+          count1080p,
+          count720p,
+          countSd,
+          hevcCount,
+          h264Count,
+          av1Count,
+          enrichmentPending: items.length,
+          enrichmentComplete: 0,
+        })
+        .where(eq(librarySnapshots.id, existing.id));
+      return { id: existing.id };
+    }
+
+    // No existing snapshot today, or existing has more items (don't overwrite with partial data)
+    if (existing) {
+      return { id: existing.id };
+    }
+
     const [snapshot] = await db
       .insert(librarySnapshots)
       .values({
