@@ -84,9 +84,9 @@ export function ConcurrentChart({
               categoryValue.includes('T') ? categoryValue : categoryValue + 'T00:00:00'
             );
             if (isNaN(date.getTime())) return '';
-            if (period === 'year') {
-              // Short month name for yearly view (Dec, Jan, Feb)
-              return date.toLocaleDateString('en-US', { month: 'short' });
+            // Include year for longer time periods to differentiate labels
+            if (period === 'year' || period === 'all') {
+              return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
             }
             // M/D format for week/month views
             return `${date.getMonth() + 1}/${date.getDate()}`;
