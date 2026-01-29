@@ -147,6 +147,12 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
+      # Prebuild native directories to get hermesc for OTA updates
+      - name: Prebuild for Hermes
+        run: npx expo prebuild --clean --no-install
+        env:
+          CI: 1
+
       - name: Validate secrets
         run: |
           if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
@@ -248,6 +254,12 @@ jobs:
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
+
+      # Prebuild native directories to get hermesc for OTA updates
+      - name: Prebuild for Hermes
+        run: npx expo prebuild --clean --no-install
+        env:
+          CI: 1
 
       - name: Push OTA update with retry
         run: |
