@@ -411,6 +411,404 @@ describe('Session Behavior Evaluators', () => {
     });
   });
 
+  describe('travel_speed_kmh', () => {
+    it('calculates speed between current and previous session', () => {
+      const now = new Date();
+      const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+
+      // NYC
+      const currentSession = createMockSession({
+        id: 's1',
+        serverUserId: 'user-1',
+        startedAt: now,
+        geoLat: 40.7128,
+        geoLon: -74.006,
+      });
+
+      // Boston (~350km from NYC)
+      const previousSession = createMockSession({
+        id: 's2',
+        serverUserId: 'user-1',
+        startedAt: twoHoursAgo,
+        geoLat: 42.3601,
+        geoLon: -71.0589,
+      });
+
+      const ctx = createTestContext({
+        session: currentSession,
+        serverUser: createMockServerUser({ id: 'user-1' }),
+        recentSessions: [currentSession, previousSession],
+      });
+
+      const evaluator = evaluatorRegistry.travel_speed_kmh;
+      // ~350km in 2 hours = ~175 km/h
+      expect(
+        evaluator(ctx, createCondition({ field: 'travel_speed_kmh', operator: 'gt', value: 100 }))
+      ).toBe(true);
+      expect(
+        evaluator(ctx, createCondition({ field: 'travel_speed_kmh', operator: 'gt', value: 300 }))
+      ).toBe(false);
+    });
+
+    it('returns 0 when no previous sessions', () => {
+      const session = createMockSession({
+        serverUserId: 'user-1',
+        geoLat: 40.7128,
+        geoLon: -74.006,
+      });
+
+      const ctx = createTestContext({
+        session,
+        serverUser: createMockServerUser({ id: 'user-1' }),
+        recentSessions: [session],
+      });
+
+      const evaluator = evaluatorRegistry.travel_speed_kmh;
+      expect(
+        evaluator(ctx, createCondition({ field: 'travel_speed_kmh', operator: 'eq', value: 0 }))
+      ).toBe(true);
+    });
+
+    it('returns Infinity for simultaneous sessions with distance', () => {
+      const now = new Date();
+
+      const session1 = createMockSession({
+        id: 's1',
+        serverUserId: 'user-1',
+        startedAt: now,
+        geoLat: 40.7128,
+        geoLon: -74.006,
+      });
+
+      const session2 = createMockSession({
+        id: 's2',
+        serverUserId: 'user-1',
+        startedAt: now,
+        geoLat: 34.0522,
+        geoLon: -118.2437,
+      });
+
+      const ctx = createTestContext({
+        session: session1,
+        serverUser: createMockServerUser({ id: 'user-1' }),
+        recentSessions: [session1, session2],
+      });
+
+      const evaluator = evaluatorRegistry.travel_speed_kmh;
+      expect(
+        evaluator(ctx, createCondition({ field: 'travel_speed_kmh', operator: 'gt', value: 10000 }))
+      ).toBe(true);
+    });
+
+    it('returns 0 when coordinates are missing', () => {
+      const now = new Date();
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+      const session1 = createMockSession({
+        id: 's1',
+        serverUserId: 'user-1',
+        startedAt: now,
+        geoLat: null,
+        geoLon: null,
+      });
+
+      const session2 = createMockSession({
+        id: 's2',
+        serverUserId: 'user-1',
+        startedAt: oneHourAgo,
+        geoLat: 40.7128,
+        geoLon: -74.006,
+      });
+
+      const ctx = createTestContext({
+        session: session1,
+        serverUser: createMockServerUser({ id: 'user-1' }),
+        recentSessions: [session1, session2],
+      });
+
+      const evaluator = evaluatorRegistry.travel_speed_kmh;
+      expect(
+        evaluator(ctx, createCondition({ field: 'travel_speed_kmh', operator: 'eq', value: 0 }))
+      ).toBe(true);
+    });
+  });
+
+  describe('unique_ips_in_window', () => {
+    it('counts unique IPs within time window', () => {
+      const now = new Date();
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+
+      const session1 = createMockSession({
+        id: 's1',
+        serverUserId: 'user-1',
+        startedAt: now,
+        ipAddress: '1.1.1.1',
+      });
+      const session2 = createMockSession({
+        id: 's2',
+        serverUserId: 'user-1',
+        startedAt: oneHourAgo,
+        ipAddress: '2.2.2.2',
+      });
+      const session3 = createMockSession({
+        id: 's3',
+        serverUserId: 'user-1',
+        startedAt: twoHoursAgo,
+        ipAddress: '3.3.3.3',
+      });
+
+      const ctx = createTestContext({
+        session: session1,
+        serverUser: createMockServerUser({ id: 'user-1' }),
+        recentSessions: [session1, session2, session3],
+      });
+
+      const evaluator = evaluatorRegistry.unique_ips_in_window;
+      expect(
+        evaluator(
+          ctx,
+          createCondition({
+            field: 'unique_ips_in_window',
+            operator: 'eq',
+            value: 3,
+            params: { window_hours: 24 },
+          })
+        )
+      ).toBe(true);
+    });
+
+    it('only counts IPs within the window', () => {
+      const now = new Date();
+      const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
+      const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+
+      const session1 = createMockSession({
+        id: 's1',
+        serverUserId: 'user-1',
+        startedAt: now,
+        ipAddress: '1.1.1.1',
+      });
+      const session2 = createMockSession({
+        id: 's2',
+        serverUserId: 'user-1',
+        startedAt: thirtyMinutesAgo,
+        ipAddress: '2.2.2.2',
+      });
+      const session3 = createMockSession({
+        id: 's3',
+        serverUserId: 'user-1',
+        startedAt: twoHoursAgo,
+        ipAddress: '3.3.3.3',
+      });
+
+      const ctx = createTestContext({
+        session: session1,
+        serverUser: createMockServerUser({ id: 'user-1' }),
+        recentSessions: [session1, session2, session3],
+      });
+
+      const evaluator = evaluatorRegistry.unique_ips_in_window;
+      // 1 hour window should only include sessions 1 and 2
+      expect(
+        evaluator(
+          ctx,
+          createCondition({
+            field: 'unique_ips_in_window',
+            operator: 'eq',
+            value: 2,
+            params: { window_hours: 1 },
+          })
+        )
+      ).toBe(true);
+    });
+
+    it('deduplicates same IPs', () => {
+      const now = new Date();
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+      const session1 = createMockSession({
+        id: 's1',
+        serverUserId: 'user-1',
+        startedAt: now,
+        ipAddress: '1.1.1.1',
+      });
+      const session2 = createMockSession({
+        id: 's2',
+        serverUserId: 'user-1',
+        startedAt: oneHourAgo,
+        ipAddress: '1.1.1.1',
+      });
+
+      const ctx = createTestContext({
+        session: session1,
+        serverUser: createMockServerUser({ id: 'user-1' }),
+        recentSessions: [session1, session2],
+      });
+
+      const evaluator = evaluatorRegistry.unique_ips_in_window;
+      expect(
+        evaluator(
+          ctx,
+          createCondition({
+            field: 'unique_ips_in_window',
+            operator: 'eq',
+            value: 1,
+            params: { window_hours: 24 },
+          })
+        )
+      ).toBe(true);
+    });
+
+    it('uses default 24 hour window when not specified', () => {
+      const now = new Date();
+      const session1 = createMockSession({
+        id: 's1',
+        serverUserId: 'user-1',
+        startedAt: now,
+        ipAddress: '1.1.1.1',
+      });
+
+      const ctx = createTestContext({
+        session: session1,
+        serverUser: createMockServerUser({ id: 'user-1' }),
+        recentSessions: [session1],
+      });
+
+      const evaluator = evaluatorRegistry.unique_ips_in_window;
+      // Should work without params
+      expect(
+        evaluator(
+          ctx,
+          createCondition({
+            field: 'unique_ips_in_window',
+            operator: 'eq',
+            value: 1,
+          })
+        )
+      ).toBe(true);
+    });
+  });
+
+  describe('unique_devices_in_window', () => {
+    it('counts unique devices within time window', () => {
+      const now = new Date();
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+      const session1 = createMockSession({
+        id: 's1',
+        serverUserId: 'user-1',
+        startedAt: now,
+        deviceId: 'device-1',
+        playerName: 'Player 1',
+      });
+      const session2 = createMockSession({
+        id: 's2',
+        serverUserId: 'user-1',
+        startedAt: oneHourAgo,
+        deviceId: 'device-2',
+        playerName: 'Player 2',
+      });
+
+      const ctx = createTestContext({
+        session: session1,
+        serverUser: createMockServerUser({ id: 'user-1' }),
+        recentSessions: [session1, session2],
+      });
+
+      const evaluator = evaluatorRegistry.unique_devices_in_window;
+      expect(
+        evaluator(
+          ctx,
+          createCondition({
+            field: 'unique_devices_in_window',
+            operator: 'eq',
+            value: 2,
+            params: { window_hours: 24 },
+          })
+        )
+      ).toBe(true);
+    });
+
+    it('falls back to playerName when deviceId is null', () => {
+      const now = new Date();
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+      const session1 = createMockSession({
+        id: 's1',
+        serverUserId: 'user-1',
+        startedAt: now,
+        deviceId: null,
+        playerName: 'iPhone',
+      });
+      const session2 = createMockSession({
+        id: 's2',
+        serverUserId: 'user-1',
+        startedAt: oneHourAgo,
+        deviceId: null,
+        playerName: 'iPad',
+      });
+
+      const ctx = createTestContext({
+        session: session1,
+        serverUser: createMockServerUser({ id: 'user-1' }),
+        recentSessions: [session1, session2],
+      });
+
+      const evaluator = evaluatorRegistry.unique_devices_in_window;
+      expect(
+        evaluator(
+          ctx,
+          createCondition({
+            field: 'unique_devices_in_window',
+            operator: 'eq',
+            value: 2,
+            params: { window_hours: 24 },
+          })
+        )
+      ).toBe(true);
+    });
+
+    it('deduplicates same devices', () => {
+      const now = new Date();
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+      const session1 = createMockSession({
+        id: 's1',
+        serverUserId: 'user-1',
+        startedAt: now,
+        deviceId: 'device-1',
+        playerName: 'Player 1',
+      });
+      const session2 = createMockSession({
+        id: 's2',
+        serverUserId: 'user-1',
+        startedAt: oneHourAgo,
+        deviceId: 'device-1',
+        playerName: 'Player 1',
+      });
+
+      const ctx = createTestContext({
+        session: session1,
+        serverUser: createMockServerUser({ id: 'user-1' }),
+        recentSessions: [session1, session2],
+      });
+
+      const evaluator = evaluatorRegistry.unique_devices_in_window;
+      expect(
+        evaluator(
+          ctx,
+          createCondition({
+            field: 'unique_devices_in_window',
+            operator: 'eq',
+            value: 1,
+            params: { window_hours: 24 },
+          })
+        )
+      ).toBe(true);
+    });
+  });
+
   describe('inactive_days', () => {
     it('calculates days since last activity', () => {
       const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
@@ -484,6 +882,86 @@ describe('Stream Quality Evaluators', () => {
         evaluator(
           ctx,
           createCondition({ field: 'source_resolution', operator: 'eq', value: '1080p' })
+        )
+      ).toBe(true);
+    });
+  });
+
+  describe('output_resolution', () => {
+    it('evaluates output resolution from stream video details', () => {
+      const session = createMockSession({
+        isTranscode: true,
+        streamVideoDetails: { width: 1920, height: 1080 },
+      });
+      const ctx = createTestContext({ session });
+
+      const evaluator = evaluatorRegistry.output_resolution;
+      expect(
+        evaluator(
+          ctx,
+          createCondition({ field: 'output_resolution', operator: 'eq', value: '1080p' })
+        )
+      ).toBe(true);
+    });
+
+    it('works with in/not_in operators', () => {
+      const session = createMockSession({
+        isTranscode: true,
+        streamVideoDetails: { width: 1280, height: 720 },
+      });
+      const ctx = createTestContext({ session });
+
+      const evaluator = evaluatorRegistry.output_resolution;
+      expect(
+        evaluator(
+          ctx,
+          createCondition({
+            field: 'output_resolution',
+            operator: 'in',
+            value: ['720p', '1080p'],
+          })
+        )
+      ).toBe(true);
+      expect(
+        evaluator(
+          ctx,
+          createCondition({
+            field: 'output_resolution',
+            operator: 'not_in',
+            value: ['4K'],
+          })
+        )
+      ).toBe(true);
+    });
+
+    it('returns unknown when streamVideoDetails is null', () => {
+      const session = createMockSession({
+        isTranscode: false,
+        streamVideoDetails: null,
+      });
+      const ctx = createTestContext({ session });
+
+      const evaluator = evaluatorRegistry.output_resolution;
+      expect(
+        evaluator(
+          ctx,
+          createCondition({ field: 'output_resolution', operator: 'eq', value: 'unknown' })
+        )
+      ).toBe(true);
+    });
+
+    it('compares numeric resolution values for gt/lt operators', () => {
+      const session = createMockSession({
+        streamVideoDetails: { width: 3840, height: 2160 },
+      });
+      const ctx = createTestContext({ session });
+
+      const evaluator = evaluatorRegistry.output_resolution;
+      // 4K (2160) > 1080p (1080)
+      expect(
+        evaluator(
+          ctx,
+          createCondition({ field: 'output_resolution', operator: 'gt', value: '1080p' })
         )
       ).toBe(true);
     });
