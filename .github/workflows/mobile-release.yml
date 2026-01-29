@@ -147,9 +147,16 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      # Prebuild native directories to get hermesc for OTA updates
+      # Prebuild Android to get hermesc for Hermes bytecode compilation
+      # Note: --no-install was removed because hermesc requires gradle sync
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - name: Prebuild for Hermes
-        run: npx expo prebuild --clean --no-install
+        run: npx expo prebuild --platform android --clean
         env:
           CI: 1
 
@@ -255,9 +262,15 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      # Prebuild native directories to get hermesc for OTA updates
+      # Prebuild Android to get hermesc for Hermes bytecode compilation
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - name: Prebuild for Hermes
-        run: npx expo prebuild --clean --no-install
+        run: npx expo prebuild --platform android --clean
         env:
           CI: 1
 
