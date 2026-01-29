@@ -760,19 +760,22 @@ export const ruleRoutes: FastifyPluginAsync = async (app) => {
       })) as LegacyRule[]
     );
 
-    // Update migrated rules in database
-    let updatedCount = 0;
-    for (const migrated of result.migrated) {
-      await db
-        .update(rules)
-        .set({
-          conditions: migrated.conditions,
-          actions: migrated.actions,
-          updatedAt: new Date(),
-        })
-        .where(eq(rules.id, migrated.id));
-      updatedCount++;
-    }
+    // Update migrated rules in database within a transaction
+    const updatedCount = await db.transaction(async (tx) => {
+      let count = 0;
+      for (const migrated of result.migrated) {
+        await tx
+          .update(rules)
+          .set({
+            conditions: migrated.conditions,
+            actions: migrated.actions,
+            updatedAt: new Date(),
+          })
+          .where(eq(rules.id, migrated.id));
+        count++;
+      }
+      return count;
+    });
 
     return {
       success: true,
