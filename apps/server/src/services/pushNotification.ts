@@ -523,7 +523,9 @@ export class PushNotificationService {
       if (severityNum < s.violationMinSeverity) return false;
 
       // Check rule type filter (empty array = all types)
+      // V2 rules have null type - they pass through if array is empty or includes null
       if (s.violationRuleTypes && s.violationRuleTypes.length > 0) {
+        if (violation.rule.type === null) return false; // V2 rules don't match legacy type filters
         if (!s.violationRuleTypes.includes(violation.rule.type)) return false;
       }
 
