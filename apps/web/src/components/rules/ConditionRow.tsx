@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, X } from 'lucide-react';
+import { ChevronsUpDown, X } from 'lucide-react';
 import type { Condition, ConditionField, Operator, RulesFilterOptions } from '@tracearr/shared';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -320,15 +320,12 @@ function GroupedMultiSelectInput({
   // Group options if they have group property
   const hasGroups = options.some((o) => o.group);
   const groupedOptions = hasGroups
-    ? options.reduce(
-        (acc, opt) => {
-          const group = opt.group || 'Other';
-          if (!acc[group]) acc[group] = [];
-          acc[group].push(opt);
-          return acc;
-        },
-        {} as Record<string, typeof options>
-      )
+    ? options.reduce<Record<string, (typeof options)[number][]>>((acc, opt) => {
+        const group = opt.group || 'Other';
+        if (!acc[group]) acc[group] = [];
+        acc[group].push(opt);
+        return acc;
+      }, {})
     : null;
 
   const renderOption = (opt: { value: string; label: string }) => (
