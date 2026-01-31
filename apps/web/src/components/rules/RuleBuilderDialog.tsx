@@ -11,6 +11,7 @@ import type {
   UpdateRuleV2Input,
   RuleConditions,
   RuleActions,
+  RulesFilterOptions,
 } from '@tracearr/shared';
 
 // Combined rule type that can represent V1 or V2 rules from the API
@@ -29,6 +30,7 @@ interface RuleBuilderDialogProps {
   rule?: RuleInput;
   onSave: (data: CreateRuleV2Input | UpdateRuleV2Input) => Promise<void>;
   isLoading?: boolean;
+  filterOptions?: RulesFilterOptions;
 }
 
 export function RuleBuilderDialog({
@@ -37,6 +39,7 @@ export function RuleBuilderDialog({
   rule,
   onSave,
   isLoading,
+  filterOptions,
 }: RuleBuilderDialogProps) {
   const isEditing = !!rule;
 
@@ -63,6 +66,7 @@ export function RuleBuilderDialog({
           onSave={handleSave}
           onCancel={() => onOpenChange(false)}
           isLoading={isLoading}
+          filterOptions={filterOptions}
         />
       </DialogContent>
     </Dialog>

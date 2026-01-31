@@ -1061,6 +1061,25 @@ export interface UserFilterOption {
 }
 
 /**
+ * Server option for server filter dropdown.
+ */
+export interface ServerFilterOption {
+  id: string;
+  name: string;
+  type: 'plex' | 'jellyfin' | 'emby';
+}
+
+/**
+ * Country option with session activity indicator.
+ * Used when includeAllCountries=true for rules builder.
+ */
+export interface CountryOption {
+  code: string;
+  name: string;
+  hasSessions: boolean;
+}
+
+/**
  * Available filter options for the history page.
  * Returned by GET /sessions/filter-options to populate dropdowns.
  */
@@ -1071,12 +1090,25 @@ export interface HistoryFilterOptions {
   products: FilterOptionItem[];
   /** Available device types (iPhone, Android TV, etc.) */
   devices: FilterOptionItem[];
-  /** Available countries */
+  /** Available countries (codes with session count) */
   countries: FilterOptionItem[];
   /** Available cities */
   cities: FilterOptionItem[];
   /** Available users (with avatar info) */
   users: UserFilterOption[];
+  /** Available servers (optional, included when requested) */
+  servers?: ServerFilterOption[];
+}
+
+/**
+ * Extended filter options for rules builder.
+ * Includes all countries with session indicators and servers.
+ */
+export interface RulesFilterOptions extends Omit<HistoryFilterOptions, 'countries'> {
+  /** All countries with session activity indicator */
+  countries: CountryOption[];
+  /** Available servers */
+  servers: ServerFilterOption[];
 }
 
 export interface ApiError {

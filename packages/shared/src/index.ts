@@ -124,7 +124,10 @@ export type {
   HistorySessionResponse,
   FilterOptionItem,
   UserFilterOption,
+  ServerFilterOption,
+  CountryOption,
   HistoryFilterOptions,
+  RulesFilterOptions,
   // Mobile
   MobileToken,
   MobileSession,

@@ -74,6 +74,7 @@ import {
   useSettings,
 } from '@/hooks/queries';
 import { useCreateRuleV2, useUpdateRuleV2 } from '@/hooks/queries/useRulesV2';
+import { useRulesFilterOptions } from '@/hooks/queries/useHistory';
 import { useRowSelection } from '@/hooks/useRowSelection';
 
 const RULE_TYPE_ICONS: Record<RuleType, React.ReactNode> = {
@@ -728,6 +729,7 @@ export function Rules() {
   const [editingV2Rule, setEditingV2Rule] = useState<Rule | undefined>();
   const createRuleV2 = useCreateRuleV2();
   const updateRuleV2 = useUpdateRuleV2();
+  const { data: rulesFilterOptions } = useRulesFilterOptions();
 
   // Row selection for bulk operations
   const { selectedIds, selectedCount, toggleRow, clearSelection, isSelected } = useRowSelection({
@@ -1028,6 +1030,7 @@ export function Rules() {
         rule={editingV2Rule}
         onSave={handleV2Save}
         isLoading={createRuleV2.isPending || updateRuleV2.isPending}
+        filterOptions={rulesFilterOptions}
       />
     </div>
   );

@@ -33,6 +33,7 @@ import type {
   NotificationEventType,
   HistorySessionResponse,
   HistoryFilterOptions,
+  RulesFilterOptions,
   HistoryQueryInput,
   HistoryAggregatesQueryInput,
   HistoryAggregates,
@@ -667,6 +668,13 @@ class ApiClient {
       return this.request<HistoryFilterOptions>(
         `/sessions/filter-options?${searchParams.toString()}`
       );
+    },
+    /**
+     * Get filter options for the rules builder.
+     * Returns all countries (with hasSessions indicator) and servers.
+     */
+    rulesFilterOptions: () => {
+      return this.request<RulesFilterOptions>('/sessions/filter-options?includeAllCountries=true');
     },
     getActive: async (serverId?: string) => {
       const params = new URLSearchParams();

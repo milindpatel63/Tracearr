@@ -1,5 +1,9 @@
 import { Plus } from 'lucide-react';
-import type { Condition, ConditionGroup as ConditionGroupType } from '@tracearr/shared';
+import type {
+  Condition,
+  ConditionGroup as ConditionGroupType,
+  RulesFilterOptions,
+} from '@tracearr/shared';
 import { Button } from '@/components/ui/button';
 import { ConditionRow } from './ConditionRow';
 import { getDefaultOperatorForField, getDefaultValueForField } from '@/lib/rules';
@@ -10,6 +14,7 @@ interface ConditionGroupProps {
   onChange: (group: ConditionGroupType) => void;
   onRemove: () => void;
   showRemove?: boolean;
+  filterOptions?: RulesFilterOptions;
 }
 
 export function ConditionGroup({
@@ -18,6 +23,7 @@ export function ConditionGroup({
   onChange,
   onRemove,
   showRemove = true,
+  filterOptions,
 }: ConditionGroupProps) {
   // Add a new condition to the group
   const addCondition = () => {
@@ -89,6 +95,7 @@ export function ConditionGroup({
               onChange={(c) => updateCondition(index, c)}
               onRemove={() => removeCondition(index)}
               showRemove={group.conditions.length > 1}
+              filterOptions={filterOptions}
             />
           </div>
         ))}

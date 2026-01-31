@@ -8,6 +8,7 @@ import type {
   Action,
   CreateRuleV2Input,
   UpdateRuleV2Input,
+  RulesFilterOptions,
 } from '@tracearr/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,6 +39,7 @@ interface RuleBuilderProps {
   onSave: (data: CreateRuleV2Input | UpdateRuleV2Input) => Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
+  filterOptions?: RulesFilterOptions;
 }
 
 // Create default condition group
@@ -94,6 +96,7 @@ export function RuleBuilder({
   onSave,
   onCancel,
   isLoading = false,
+  filterOptions,
 }: RuleBuilderProps) {
   const [name, setName] = useState(initialRule?.name ?? '');
   const [description, setDescription] = useState(initialRule?.description ?? '');
@@ -253,6 +256,7 @@ export function RuleBuilder({
                 onChange={(g) => updateConditionGroup(index, g)}
                 onRemove={() => removeConditionGroup(index)}
                 showRemove={conditions.groups.length > 1}
+                filterOptions={filterOptions}
               />
             </div>
           ))}

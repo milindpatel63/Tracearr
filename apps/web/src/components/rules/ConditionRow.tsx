@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import type { Condition, ConditionField, Operator } from '@tracearr/shared';
+import type { Condition, ConditionField, Operator, RulesFilterOptions } from '@tracearr/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -28,6 +28,7 @@ interface ConditionRowProps {
   onChange: (condition: Condition) => void;
   onRemove: () => void;
   showRemove?: boolean;
+  filterOptions?: RulesFilterOptions;
 }
 
 export function ConditionRow({
@@ -35,6 +36,7 @@ export function ConditionRow({
   onChange,
   onRemove,
   showRemove = true,
+  filterOptions,
 }: ConditionRowProps) {
   const fieldDef = FIELD_DEFINITIONS[condition.field];
   const fieldsByCategory = getFieldsByCategory();
@@ -132,6 +134,7 @@ export function ConditionRow({
           value={condition.value}
           onChange={handleValueChange}
           isArrayOperator={isArrayOperator(condition.operator)}
+          filterOptions={filterOptions}
         />
       </div>
 
@@ -173,9 +176,40 @@ interface ValueInputProps {
   value: Condition['value'];
   onChange: (value: Condition['value']) => void;
   isArrayOperator: boolean;
+  filterOptions?: RulesFilterOptions;
 }
 
-function ValueInput({ fieldDef, value, onChange, isArrayOperator: isArray }: ValueInputProps) {
+// Get dynamic options for fields that need API data
+function getDynamicOptions(
+  field: ConditionField,
+  filterOptions?: RulesFilterOptions
+): { value: string; label: string; group?: string }[] | undefined {
+  if (!filterOptions) return undefined;
+
+  switch (field) {
+    case 'country':
+      return filterOptions.countries?.map((c) => ({
+        value: c.code,
+        label: c.name,
+        group: c.hasSessions ? 'Recently Seen' : 'All Countries',
+      }));
+    case 'server_id':
+      return filterOptions.servers?.map((s) => ({
+        value: s.id,
+        label: s.name,
+      }));
+    default:
+      return undefined;
+  }
+}
+
+function ValueInput({
+  fieldDef,
+  value,
+  onChange,
+  isArrayOperator: isArray,
+  filterOptions,
+}: ValueInputProps) {
   // Boolean
   if (fieldDef.valueType === 'boolean') {
     return (
@@ -188,10 +222,14 @@ function ValueInput({ fieldDef, value, onChange, isArrayOperator: isArray }: Val
 
   // Select (single or multi based on operator)
   if (fieldDef.valueType === 'select' || fieldDef.valueType === 'multi-select') {
+    // Use dynamic options if available, otherwise fall back to static options
+    const dynamicOptions = getDynamicOptions(fieldDef.field, filterOptions);
+    const options = dynamicOptions ?? fieldDef.options ?? [];
+
     if (isArray) {
       return (
-        <MultiSelectInput
-          options={fieldDef.options ?? []}
+        <GroupedMultiSelectInput
+          options={options}
           value={Array.isArray(value) ? (value as string[]) : []}
           onChange={onChange}
           placeholder={fieldDef.placeholder ?? `Select ${fieldDef.label.toLowerCase()}...`}
@@ -206,7 +244,7 @@ function ValueInput({ fieldDef, value, onChange, isArrayOperator: isArray }: Val
           <SelectValue placeholder={fieldDef.placeholder ?? 'Select...'} />
         </SelectTrigger>
         <SelectContent className="min-w-[200px]">
-          {fieldDef.options?.map((opt) => (
+          {options.map((opt) => (
             <SelectItem key={opt.value} value={opt.value}>
               {opt.label}
             </SelectItem>
@@ -246,15 +284,20 @@ function ValueInput({ fieldDef, value, onChange, isArrayOperator: isArray }: Val
   );
 }
 
-// Simple multi-select using checkboxes in a popover
-interface MultiSelectInputProps {
-  options: { value: string; label: string }[];
+// Multi-select with optional grouping support
+interface GroupedMultiSelectInputProps {
+  options: { value: string; label: string; group?: string }[];
   value: string[];
   onChange: (value: string[]) => void;
   placeholder?: string;
 }
 
-function MultiSelectInput({ options, value, onChange, placeholder }: MultiSelectInputProps) {
+function GroupedMultiSelectInput({
+  options,
+  value,
+  onChange,
+  placeholder,
+}: GroupedMultiSelectInputProps) {
   const selectedLabels = value
     .map((v) => options.find((o) => o.value === v)?.label ?? v)
     .join(', ');
@@ -267,6 +310,45 @@ function MultiSelectInput({ options, value, onChange, placeholder }: MultiSelect
     }
   };
 
+  // Group options if they have group property
+  const hasGroups = options.some((o) => o.group);
+  const groupedOptions = hasGroups
+    ? options.reduce(
+        (acc, opt) => {
+          const group = opt.group || 'Other';
+          if (!acc[group]) acc[group] = [];
+          acc[group].push(opt);
+          return acc;
+        },
+        {} as Record<string, typeof options>
+      )
+    : null;
+
+  const renderOption = (opt: { value: string; label: string }) => (
+    <SelectItem key={opt.value} value={opt.value}>
+      <div className="flex items-center gap-2">
+        <div
+          className={`h-4 w-4 rounded border ${
+            value.includes(opt.value) ? 'bg-primary border-primary' : 'border-input'
+          }`}
+        >
+          {value.includes(opt.value) && (
+            <svg
+              className="text-primary-foreground h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={3}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+        </div>
+        {opt.label}
+      </div>
+    </SelectItem>
+  );
+
   return (
     <Select value="_multi" onValueChange={(v) => v !== '_multi' && toggleOption(v)}>
       <SelectTrigger>
@@ -274,31 +356,15 @@ function MultiSelectInput({ options, value, onChange, placeholder }: MultiSelect
           {value.length === 0 ? placeholder : selectedLabels}
         </span>
       </SelectTrigger>
-      <SelectContent>
-        {options.map((opt) => (
-          <SelectItem key={opt.value} value={opt.value}>
-            <div className="flex items-center gap-2">
-              <div
-                className={`h-4 w-4 rounded border ${
-                  value.includes(opt.value) ? 'bg-primary border-primary' : 'border-input'
-                }`}
-              >
-                {value.includes(opt.value) && (
-                  <svg
-                    className="text-primary-foreground h-4 w-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={3}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-              </div>
-              {opt.label}
-            </div>
-          </SelectItem>
-        ))}
+      <SelectContent className="max-h-[300px]">
+        {groupedOptions
+          ? Object.entries(groupedOptions).map(([groupName, groupOptions]) => (
+              <SelectGroup key={groupName}>
+                <SelectLabel>{groupName}</SelectLabel>
+                {groupOptions.map(renderOption)}
+              </SelectGroup>
+            ))
+          : options.map(renderOption)}
       </SelectContent>
     </Select>
   );
