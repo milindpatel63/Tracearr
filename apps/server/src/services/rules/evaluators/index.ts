@@ -4,6 +4,7 @@ import type {
   VideoResolution,
   DeviceType,
   Platform,
+  TranscodingConditionValue,
 } from '@tracearr/shared';
 import type { ConditionEvaluator, EvaluationContext } from '../types.js';
 import { compare } from '../comparisons.js';
@@ -412,7 +413,23 @@ const evaluateIsTranscoding: ConditionEvaluator = (
   condition: Condition
 ): boolean => {
   const { session } = context;
+  const value = condition.value;
 
+  // Handle new string values
+  if (typeof value === 'string') {
+    switch (value as TranscodingConditionValue) {
+      case 'video':
+        return session.videoDecision === 'transcode';
+      case 'audio':
+        return session.audioDecision === 'transcode';
+      case 'video_or_audio':
+        return session.isTranscode;
+      case 'neither':
+        return !session.isTranscode;
+    }
+  }
+
+  // Backwards compatibility: handle boolean values
   return compare(session.isTranscode, condition.operator, condition.value);
 };
 
