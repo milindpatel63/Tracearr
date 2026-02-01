@@ -362,7 +362,7 @@ describe('Action Executor Registry', () => {
     });
 
     describe('kill_stream', () => {
-      it('should terminate session', async () => {
+      it('should terminate session silently when no message provided', async () => {
         const context = createMockContext();
         const action: KillStreamAction = { type: 'kill_stream' };
 
@@ -372,7 +372,8 @@ describe('Action Executor Registry', () => {
         expect(mockDeps.terminateSession).toHaveBeenCalledWith(
           context.session.id,
           context.server.id,
-          0
+          0,
+          undefined
         );
       });
 
@@ -385,7 +386,44 @@ describe('Action Executor Registry', () => {
         expect(mockDeps.terminateSession).toHaveBeenCalledWith(
           context.session.id,
           context.server.id,
-          30
+          30,
+          undefined
+        );
+      });
+
+      it('should terminate session with custom message', async () => {
+        const context = createMockContext();
+        const action: KillStreamAction = {
+          type: 'kill_stream',
+          message: 'You violated the concurrent streams policy',
+        };
+
+        const result = await executeAction(context, action);
+
+        expect(result.success).toBe(true);
+        expect(mockDeps.terminateSession).toHaveBeenCalledWith(
+          context.session.id,
+          context.server.id,
+          0,
+          'You violated the concurrent streams policy'
+        );
+      });
+
+      it('should terminate session with delay and message', async () => {
+        const context = createMockContext();
+        const action: KillStreamAction = {
+          type: 'kill_stream',
+          delay_seconds: 15,
+          message: 'Stream will be terminated in 15 seconds',
+        };
+
+        await executeAction(context, action);
+
+        expect(mockDeps.terminateSession).toHaveBeenCalledWith(
+          context.session.id,
+          context.server.id,
+          15,
+          'Stream will be terminated in 15 seconds'
         );
       });
     });

@@ -55,7 +55,12 @@ export interface ActionExecutorDeps {
   adjustUserTrust: (userId: string, delta: number) => Promise<void>;
   setUserTrust: (userId: string, value: number) => Promise<void>;
   resetUserTrust: (userId: string) => Promise<void>;
-  terminateSession: (sessionId: string, serverId: string, delay?: number) => Promise<void>;
+  terminateSession: (
+    sessionId: string,
+    serverId: string,
+    delay?: number,
+    message?: string
+  ) => Promise<void>;
   sendClientMessage: (sessionId: string, message: string) => Promise<void>;
   checkCooldown: (ruleId: string, targetId: string, cooldownMinutes: number) => Promise<boolean>;
   setCooldown: (ruleId: string, targetId: string, cooldownMinutes: number) => Promise<void>;
@@ -299,8 +304,9 @@ const executeKillStream: ActionExecutor = async (
   const { session, server } = context;
   const typedAction = action as KillStreamAction;
   const delaySeconds = typedAction.delay_seconds ?? 0;
+  const message = typedAction.message;
 
-  await currentDeps.terminateSession(session.id, server.id, delaySeconds);
+  await currentDeps.terminateSession(session.id, server.id, delaySeconds, message);
 };
 
 /**

@@ -192,7 +192,7 @@ export function createActionExecutorDeps(redis: Redis): ActionExecutorDeps {
     /**
      * Terminate a session using the termination service.
      */
-    terminateSession: async (sessionId, serverId, delay) => {
+    terminateSession: async (sessionId, serverId, delay, message) => {
       // Dynamic import to avoid circular dependency
       const { terminateSession: terminate } = await import('../termination.js');
 
@@ -208,14 +208,14 @@ export function createActionExecutorDeps(redis: Redis): ActionExecutorDeps {
       const result = await terminate({
         sessionId,
         trigger: 'rule',
-        reason: 'Terminated by rule action',
+        reason: message,
       });
 
       if (!result.success) {
         throw new Error(result.error ?? 'Failed to terminate session');
       }
 
-      rulesLogger.info('Session terminated', { sessionId, serverId });
+      rulesLogger.info('Session terminated', { sessionId, serverId, message });
     },
 
     /**

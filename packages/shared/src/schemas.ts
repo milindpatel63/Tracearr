@@ -456,6 +456,8 @@ export const killStreamActionSchema = z.object({
   delay_seconds: z.number().int().min(0).max(300).optional(),
   require_confirmation: z.boolean().optional(),
   cooldown_minutes: z.number().int().positive().optional(),
+  /** Message to display to user before termination. If omitted, terminates silently. */
+  message: z.string().min(1).max(500).optional(),
 });
 
 export const messageClientActionSchema = z.object({

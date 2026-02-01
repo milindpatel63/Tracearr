@@ -560,6 +560,8 @@ export interface KillStreamAction {
   delay_seconds?: number;
   require_confirmation?: boolean;
   cooldown_minutes?: number;
+  /** Message to display to user before termination. If omitted, terminates silently. */
+  message?: string;
 }
 
 export interface MessageClientAction {
