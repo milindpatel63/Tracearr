@@ -234,7 +234,7 @@ const executeNotify: ActionExecutor = async (
   context: EvaluationContext,
   action: Action
 ): Promise<void> => {
-  const { session, serverUser, rule } = context;
+  const { session, serverUser, server, rule } = context;
   const typedAction = action as NotifyAction;
   const channels = typedAction.channels;
 
@@ -254,6 +254,10 @@ const executeNotify: ActionExecutor = async (
       sessionId: session.id,
       userId: serverUser.id,
       mediaTitle: session.mediaTitle,
+      // Image data for rich push notifications
+      serverId: server.id,
+      thumbPath: session.thumbPath,
+      userThumbUrl: serverUser.thumbUrl,
     },
   });
 };
