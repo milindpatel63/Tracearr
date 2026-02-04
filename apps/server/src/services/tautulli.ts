@@ -26,6 +26,7 @@ import {
 } from './import/index.js';
 import { normalizeClient } from '../utils/platformNormalizer.js';
 import { normalizeStreamDecisions } from '../utils/transcodeNormalizer.js';
+import { sanitizeCodec } from '../utils/codecNormalizer.js';
 
 const PAGE_SIZE = 5000; // Larger batches = fewer API calls (tested up to 10k, scales linearly)
 const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
@@ -1521,14 +1522,13 @@ export function mapStreamDataToSession(
   // Return mapped fields (only include non-empty objects)
   return {
     // Scalar fields (uppercase codecs for consistency with other importers)
-    // Truncate to varchar(50) limit
-    sourceVideoCodec: streamData.video_codec?.toUpperCase()?.substring(0, 50) ?? null,
+    sourceVideoCodec: sanitizeCodec(streamData.video_codec),
     sourceVideoWidth: streamData.video_width ?? null,
     sourceVideoHeight: streamData.video_height ?? null,
-    sourceAudioCodec: streamData.audio_codec?.toUpperCase()?.substring(0, 50) ?? null,
+    sourceAudioCodec: sanitizeCodec(streamData.audio_codec),
     sourceAudioChannels: streamData.audio_channels ?? null,
-    streamVideoCodec: streamData.stream_video_codec?.toUpperCase()?.substring(0, 50) ?? null,
-    streamAudioCodec: streamData.stream_audio_codec?.toUpperCase()?.substring(0, 50) ?? null,
+    streamVideoCodec: sanitizeCodec(streamData.stream_video_codec),
+    streamAudioCodec: sanitizeCodec(streamData.stream_audio_codec),
     bitrate: streamData.bandwidth ?? streamData.stream_bitrate ?? streamData.bitrate ?? null,
     quality: streamData.quality_profile ?? null,
 

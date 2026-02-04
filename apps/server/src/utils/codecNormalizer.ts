@@ -12,6 +12,19 @@
  * Output: Consistent display names like 'HEVC', 'H.264', 'AAC', 'Dolby TrueHD'
  */
 
+/** Max length for codec fields in the database (varchar(50)) */
+const CODEC_MAX_LENGTH = 50;
+
+/**
+ * Sanitize codec for database storage.
+ * Returns null if the value is missing or exceeds the field length constraint.
+ * This prevents storing truncated garbage data from malformed API responses.
+ */
+export function sanitizeCodec(codec: string | null | undefined): string | null {
+  if (!codec || codec.length > CODEC_MAX_LENGTH) return null;
+  return codec.toUpperCase();
+}
+
 /**
  * Normalize video codec to display-friendly name
  */

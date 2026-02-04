@@ -12,6 +12,7 @@
  */
 
 import { eq } from 'drizzle-orm';
+import { sanitizeCodec } from '../utils/codecNormalizer.js';
 import type {
   JellystatPlaybackActivity,
   JellystatImportProgress,
@@ -170,7 +171,7 @@ export function extractJellystatStreamDetails(
 
     // Source video
     if (videoStream) {
-      result.sourceVideoCodec = videoStream.Codec?.toUpperCase()?.substring(0, 50) ?? null;
+      result.sourceVideoCodec = sanitizeCodec(videoStream.Codec);
       result.sourceVideoWidth = videoStream.Width ?? null;
       result.sourceVideoHeight = videoStream.Height ?? null;
 
@@ -193,7 +194,7 @@ export function extractJellystatStreamDetails(
 
     // Source audio
     if (audioStream) {
-      result.sourceAudioCodec = audioStream.Codec?.toUpperCase()?.substring(0, 50) ?? null;
+      result.sourceAudioCodec = sanitizeCodec(audioStream.Codec);
       result.sourceAudioChannels = audioStream.Channels ?? null;
 
       // Build source audio details JSONB
@@ -224,12 +225,8 @@ export function extractJellystatStreamDetails(
   // Extract transcode/stream output info from TranscodingInfo
   if (transcodingInfo) {
     // Stream output codecs (after transcode)
-    if (transcodingInfo.VideoCodec) {
-      result.streamVideoCodec = transcodingInfo.VideoCodec.toUpperCase().substring(0, 50);
-    }
-    if (transcodingInfo.AudioCodec) {
-      result.streamAudioCodec = transcodingInfo.AudioCodec.toUpperCase().substring(0, 50);
-    }
+    result.streamVideoCodec = sanitizeCodec(transcodingInfo.VideoCodec);
+    result.streamAudioCodec = sanitizeCodec(transcodingInfo.AudioCodec);
 
     // Build stream video details JSONB
     const streamVideo: StreamVideoDetails = {};
