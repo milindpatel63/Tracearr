@@ -86,15 +86,23 @@ Tracearr handles all three. One install, one interface.
 
 ## Quick Start
 
-The supervised image bundles TimescaleDB, Redis, and Tracearr in a single container. **Designed for Unraid and intended for bare metal hosts only** (not recommended for VMs or nested containers). Requires 2GB+ RAM. Secrets are auto-generated on first run.
-
 ```bash
-docker compose -f docker/examples/docker-compose.supervised-example.yml up -d
+# Download compose file
+curl -O https://raw.githubusercontent.com/connorgallopo/Tracearr/main/docker/examples/docker-compose.pg18.yml
+
+# Generate secrets
+echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+echo "COOKIE_SECRET=$(openssl rand -hex 32)" >> .env
+
+# Deploy
+docker compose -f docker-compose.pg18.yml up -d
 ```
 
 Open `http://localhost:3000` and connect your Plex, Jellyfin, or Emby server.
 
-For separate services, Portainer deployment, or detailed requirements, see the [Docker deployment guide](docker/examples/README.md). For full documentation, visit [docs.tracearr.com](https://docs.tracearr.com).
+**Unraid users:** The supervised image bundles everything in one container with zero configuration. See [docker/examples](docker/examples/README.md) for details.
+
+For Portainer deployment, alternative configurations, or detailed requirements, see the [Docker deployment guide](docker/examples/README.md). For full documentation, visit [docs.tracearr.com](https://docs.tracearr.com).
 
 ### Docker Tags
 

@@ -1,16 +1,72 @@
-# Tracearr Docker Examples
+# Tracearr Docker Installation
 
-Ready-to-use Docker Compose files for deploying Tracearr via **Portainer**, **Proxmox**, or any Docker environment. For project overview and features, see the [main README](../../README.md).
+Deploy Tracearr using Docker Compose. For full documentation, visit [docs.tracearr.com](https://docs.tracearr.com).
 
-> **Unraid & TrueNAS Scale:** Use the Community Apps / TrueCharts instead of these compose files.
+> **Unraid & TrueNAS:** Use Community Apps / TrueCharts instead of these compose files.
 
-## Quick Reference
+---
 
-| File                                    | Description                       | RAM Required | Setup       |
-| --------------------------------------- | --------------------------------- | ------------ | ----------- |
-| `docker-compose.supervised-example.yml` | All-in-one (DB + Redis + App)     | **2GB min**  | Zero config |
-| `docker-compose.example.yml`            | Separate services (standard)      | 1GB          | Secrets     |
-| `docker-compose.pg18.yml`               | Separate services (PostgreSQL 18) | 1GB          | Secrets     |
+## Quick Start (Recommended)
+
+```bash
+# 1. Download compose file
+curl -O https://raw.githubusercontent.com/connorgallopo/Tracearr/main/docker/examples/docker-compose.pg18.yml
+
+# 2. Generate secrets
+echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+echo "COOKIE_SECRET=$(openssl rand -hex 32)" >> .env
+
+# 3. Deploy
+docker compose -f docker-compose.pg18.yml up -d
+```
+
+Open `http://localhost:3000` and connect your media server.
+
+---
+
+## Compose Files
+
+| File                                    | Description                                      | RAM     | Setup       |
+| --------------------------------------- | ------------------------------------------------ | ------- | ----------- |
+| `docker-compose.pg18.yml`               | **Recommended** — PostgreSQL 18 + TimescaleDB HA | 1GB     | Secrets     |
+| `docker-compose.example.yml`            | Standard — PostgreSQL 16                         | 1GB     | Secrets     |
+| `docker-compose.supervised-example.yml` | All-in-one (Unraid bare metal only)              | **2GB** | Zero config |
+
+---
+
+## PostgreSQL 18 (Recommended)
+
+**File:** `docker-compose.pg18.yml`
+
+Uses PostgreSQL 18 with TimescaleDB HA image. Includes Toolkit extension for advanced analytics.
+
+```bash
+# Generate secrets
+echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+echo "COOKIE_SECRET=$(openssl rand -hex 32)" >> .env
+
+# Deploy
+docker compose -f docker-compose.pg18.yml up -d
+```
+
+> **Note:** For new installations only. Data format is incompatible with PostgreSQL 15/16.
+
+---
+
+## Standard (PostgreSQL 16)
+
+**File:** `docker-compose.example.yml`
+
+Traditional multi-container setup with official TimescaleDB image.
+
+```bash
+# Generate secrets
+echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+echo "COOKIE_SECRET=$(openssl rand -hex 32)" >> .env
+
+# Deploy
+docker compose -f docker-compose.example.yml up -d
+```
 
 ---
 
@@ -18,101 +74,33 @@ Ready-to-use Docker Compose files for deploying Tracearr via **Portainer**, **Pr
 
 **File:** `docker-compose.supervised-example.yml`
 
-Single container with TimescaleDB, Redis, and Tracearr bundled. **Designed for Unraid and intended for bare metal hosts only** — not recommended for VMs or nested containers.
+Single container with TimescaleDB, Redis, and Tracearr bundled. **Designed for Unraid bare metal hosts only** — not recommended for VMs or nested containers.
 
-| Pros                                       | Cons                                                    |
-| ------------------------------------------ | ------------------------------------------------------- |
-| Zero configuration — just deploy and go    | Requires minimum **2GB RAM** (PostgreSQL + Redis + App) |
-| Secrets auto-generated on first run        | Less flexible for scaling                               |
-| Includes TimescaleDB Toolkit for analytics | Can't use existing database infrastructure              |
-| Single container to manage                 |                                                         |
+| Pros                         | Cons                              |
+| ---------------------------- | --------------------------------- |
+| Zero configuration           | Requires **2GB RAM** minimum      |
+| Secrets auto-generated       | Less flexible for scaling         |
+| Includes TimescaleDB Toolkit | Can't use existing infrastructure |
 
 ```bash
 docker compose -f docker-compose.supervised-example.yml up -d
 ```
 
-Open `http://your-server:3000` and connect your media server.
-
 ---
 
-## Standard (Separate Services)
+## Alternative Platforms
 
-**File:** `docker-compose.example.yml`
-
-Traditional multi-container setup. Use this if you want more control or already have database infrastructure.
-
-| Pros                                      | Cons                                               |
-| ----------------------------------------- | -------------------------------------------------- |
-| Lower memory per container (~1GB for app) | Requires generating secrets manually               |
-| More control over individual services     | More containers to manage                          |
-| Can integrate with existing PostgreSQL    | TimescaleDB Toolkit not included in official image |
-
-```bash
-# 1. Generate secrets
-echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
-echo "COOKIE_SECRET=$(openssl rand -hex 32)" >> .env
-
-# 2. Deploy
-docker compose -f docker-compose.example.yml up -d
-```
-
----
-
-## PostgreSQL 18 (Experimental)
-
-**File:** `docker-compose.pg18.yml`
-
-Uses PostgreSQL 18 with TimescaleDB HA image. Includes Toolkit extension.
-
-**WARNING:** For **new installations only**. Do not use with existing data volumes — the data format is incompatible with PostgreSQL 15/16.
-
----
-
-## System Requirements
-
-### Memory
-
-| Deployment | Minimum RAM | Recommended |
-| ---------- | ----------- | ----------- |
-| Supervised | **2GB**     | 4GB         |
-| Standard   | 1GB         | 2GB         |
-
-The supervised container runs PostgreSQL, Redis, and Node.js. With less than 2GB RAM, the container will be killed by the OOM killer (exit code 137) and crash-loop.
-
-**Container Memory Limits:** If you set `mem_limit` in Docker Compose, the container will auto-detect this limit and tune PostgreSQL accordingly. If auto-detection fails (e.g., nested containers), set `PG_MAX_MEMORY` explicitly to match your `mem_limit`.
-
----
-
-## Portainer Deployment
-
-### Supervised (Easiest)
-
-1. Go to **Stacks** → **Add Stack**
-2. Name it `tracearr`
-3. Choose **Web editor**
-4. Paste the contents of `docker-compose.supervised-example.yml`
-5. Click **Deploy the stack**
-
-That's it! No environment variables needed.
-
-### Standard
-
-1. Go to **Stacks** → **Add Stack**
-2. Name it `tracearr`
-3. Choose **Web editor**
-4. Paste the contents of `docker-compose.example.yml`
-5. Add environment variables:
-   - `JWT_SECRET` = (generate with `openssl rand -hex 32`)
-   - `COOKIE_SECRET` = (generate with `openssl rand -hex 32`)
-6. Click **Deploy the stack**
+- **Unraid Community Apps** — Search "Tracearr" in the Apps tab
+- **TrueNAS Apps** — Available in the app catalog
+- **Proxmox VE** — Community helper script available
 
 ---
 
 ## Environment Variables
 
-### Required for Standard/PG18 Only
+### Required (Standard/PG18 Only)
 
-| Variable        | Description                 | How to Generate        |
+| Variable        | Description                 | Generate               |
 | --------------- | --------------------------- | ---------------------- |
 | `JWT_SECRET`    | Authentication token secret | `openssl rand -hex 32` |
 | `COOKIE_SECRET` | Session cookie secret       | `openssl rand -hex 32` |
@@ -129,17 +117,22 @@ That's it! No environment variables needed.
 
 ### Supervised-Only
 
-| Variable        | Default     | Description                                                                               |
-| --------------- | ----------- | ----------------------------------------------------------------------------------------- |
-| `PG_MAX_MEMORY` | Auto-detect | PostgreSQL memory limit (e.g., `2GB`). Set if using `mem_limit` and auto-detection fails. |
-
-For all configuration options, see the [main README](../../README.md#configuration).
+| Variable        | Default     | Description                                           |
+| --------------- | ----------- | ----------------------------------------------------- |
+| `PG_MAX_MEMORY` | Auto-detect | PostgreSQL memory limit (set if auto-detection fails) |
 
 ---
 
-## Data Persistence
+## Portainer Deployment
 
-Both deployments use Docker volumes by default (recommended). To use bind mounts instead, see the comments in the compose files.
+1. Go to **Stacks** → **Add Stack**
+2. Name it `tracearr`
+3. Choose **Web editor**
+4. Paste contents of your chosen compose file
+5. Add environment variables (if using standard/pg18):
+   - `JWT_SECRET` = (generate with `openssl rand -hex 32`)
+   - `COOKIE_SECRET` = (generate with `openssl rand -hex 32`)
+6. Click **Deploy the stack**
 
 ---
 

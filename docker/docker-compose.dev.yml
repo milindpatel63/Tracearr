@@ -1,3 +1,6 @@
+# LOCAL DEVELOPMENT ONLY - Database services for running Tracearr in dev mode
+# NOT for production deployment - see docker/examples/ for deployment configs
+
 services:
   timescale:
     build:

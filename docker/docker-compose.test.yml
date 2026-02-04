@@ -1,7 +1,7 @@
-version: "3.8"
+# CI/TESTING ONLY - Isolated test databases on different ports
+# NOT for production deployment - see docker/examples/ for deployment configs
 
-# Test database services - completely isolated from dev
-# Run with: docker compose -f docker/docker-compose.test.yml up -d
+version: "3.8"
 
 services:
   timescale-test:
