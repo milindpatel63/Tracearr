@@ -19,7 +19,6 @@ import type {
 } from '../types.js';
 import {
   formatViolationDetailsForDiscord,
-  getRuleDisplayName,
   getSeverityInfo,
   type DiscordField,
 } from '../formatters/violation.js';
@@ -107,7 +106,7 @@ export class DiscordAgent extends BaseAgent {
         },
         {
           name: 'Rule',
-          value: getRuleDisplayName(violation.rule.type),
+          value: violation.rule.name,
           inline: true,
         },
         {

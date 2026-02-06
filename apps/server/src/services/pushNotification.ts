@@ -9,7 +9,7 @@
 import { Expo, type ExpoPushMessage, type ExpoPushTicket } from 'expo-server-sdk';
 import { eq, isNotNull } from 'drizzle-orm';
 import type { ViolationWithDetails, ActiveSession } from '@tracearr/shared';
-import { RULE_DISPLAY_NAMES, SEVERITY_LEVELS, getSeverityPriority } from '@tracearr/shared';
+import { SEVERITY_LEVELS, getSeverityPriority } from '@tracearr/shared';
 import { db } from '../db/client.js';
 import { mobileSessions, notificationPreferences } from '../db/schema.js';
 import { getPushRateLimiter } from './pushRateLimiter.js';
@@ -508,7 +508,6 @@ export class PushNotificationService {
     const sessions = await getSessionsWithPreferences();
     if (sessions.length === 0) return;
 
-    const ruleType = violation.rule.type as keyof typeof RULE_DISPLAY_NAMES;
     const severity = violation.severity as keyof typeof SEVERITY_LEVELS;
     const severityNum = getSeverityPriority(severity);
 
@@ -568,7 +567,7 @@ export class PushNotificationService {
       buildPushMessage(session.expoPushToken, session.deviceSecret, {
         title: serverName,
         subtitle: `${SEVERITY_LEVELS[severity].label} Violation`,
-        body: `${violation.user.identityName ?? violation.user.username}: ${RULE_DISPLAY_NAMES[ruleType]}`,
+        body: `${violation.user.identityName ?? violation.user.username}: ${violation.rule.name}`,
         data: {
           type: 'violation_detected',
           violationId: violation.id,

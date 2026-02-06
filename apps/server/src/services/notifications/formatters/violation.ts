@@ -2,7 +2,7 @@
  * Shared violation formatting utilities
  */
 
-import { RULE_DISPLAY_NAMES, SEVERITY_LEVELS } from '@tracearr/shared';
+import { SEVERITY_LEVELS } from '@tracearr/shared';
 import type { ViolationWithDetails } from '../types.js';
 
 /** Fallback values when rule config doesn't specify */
@@ -50,9 +50,10 @@ export function sanitizeForDiscord(text: string): string {
 /**
  * Get the rule display name for a violation
  */
+/** @deprecated V1 rules no longer exist. Use violation.rule.name directly. */
 export function getRuleDisplayName(ruleType: string | null): string {
   if (!ruleType) return 'Custom Rule';
-  return RULE_DISPLAY_NAMES[ruleType as keyof typeof RULE_DISPLAY_NAMES] ?? ruleType;
+  return ruleType;
 }
 
 /**
@@ -290,7 +291,7 @@ export function formatViolationDetailsForDiscord(
  */
 export function formatViolationMessage(violation: ViolationWithDetails): string {
   const userName = violation.user.identityName ?? violation.user.username;
-  const ruleName = getRuleDisplayName(violation.rule.type);
+  const ruleName = violation.rule.name;
   const severity = violation.severity as keyof typeof SEVERITY_LEVELS;
 
   return `User ${userName} triggered ${ruleName} (${SEVERITY_LEVELS[severity].label} severity)`;
