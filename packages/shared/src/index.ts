@@ -429,3 +429,10 @@ export { ROLE_PERMISSIONS, canLogin, hasMinRole, isOwner, isActive } from './typ
 
 // Session constants
 export { MEDIA_TYPES, DEFAULT_STREAM_DETAILS } from './types.js';
+
+// Violation utilities
+export {
+  collectViolationSessions,
+  getViolationDescription,
+  getViolationDetails,
+} from './violations.js';
