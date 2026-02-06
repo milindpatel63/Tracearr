@@ -21,7 +21,7 @@ import type { RuleConditions, RuleActions } from '@tracearr/shared';
 import { db } from '../db/client.js';
 import { rules, serverUsers, violations, servers } from '../db/schema.js';
 import { hasServerAccess } from '../utils/serverFiltering.js';
-import { scheduleInactivityChecks } from '../jobs/inactivityCheckQueue.js';
+import { scheduleInactivityChecks, hasInactivityCondition } from '../jobs/inactivityCheckQueue.js';
 import {
   needsMigration,
   convertLegacyRule,
@@ -208,6 +208,11 @@ export const ruleRoutes: FastifyPluginAsync = async (app) => {
       return reply.internalServerError('Failed to create rule');
     }
 
+    // Reschedule inactivity checks if this V2 rule has inactivity conditions
+    if (hasInactivityCondition(conditions)) {
+      void scheduleInactivityChecks();
+    }
+
     return reply.status(201).send(rule);
   });
 
@@ -353,9 +358,8 @@ export const ruleRoutes: FastifyPluginAsync = async (app) => {
       return reply.internalServerError('Failed to update rule');
     }
 
-    // Reschedule inactivity checks if this is an inactivity rule
-    // (interval or active status may have changed)
-    if (updatedRule.type === 'account_inactivity') {
+    // Reschedule inactivity checks if this rule has inactivity conditions
+    if (hasInactivityCondition(updatedRule.conditions)) {
       void scheduleInactivityChecks();
     }
 
@@ -391,6 +395,7 @@ export const ruleRoutes: FastifyPluginAsync = async (app) => {
         serverId: rules.serverId,
         serverUserId: rules.serverUserId,
         serverUserServerId: serverUsers.serverId,
+        conditions: rules.conditions,
       })
       .from(rules)
       .leftJoin(serverUsers, eq(rules.serverUserId, serverUsers.id))
@@ -407,6 +412,8 @@ export const ruleRoutes: FastifyPluginAsync = async (app) => {
     if (effectiveServerId && !hasServerAccess(authUser, effectiveServerId)) {
       return reply.forbidden('You do not have access to this rule');
     }
+
+    const hadInactivity = hasInactivityCondition(existingRule.conditions);
 
     // Build update object
     const updateData: Partial<{
@@ -448,6 +455,12 @@ export const ruleRoutes: FastifyPluginAsync = async (app) => {
       return reply.internalServerError('Failed to update rule');
     }
 
+    // Reschedule inactivity checks if inactivity conditions changed
+    const hasInactivity = hasInactivityCondition(updatedRule.conditions);
+    if (hadInactivity || hasInactivity) {
+      void scheduleInactivityChecks();
+    }
+
     return updatedRule;
   });
 
@@ -472,7 +485,7 @@ export const ruleRoutes: FastifyPluginAsync = async (app) => {
     const ruleRows = await db
       .select({
         id: rules.id,
-        type: rules.type,
+        conditions: rules.conditions,
         serverUserId: rules.serverUserId,
         serverId: serverUsers.serverId,
       })
@@ -495,7 +508,7 @@ export const ruleRoutes: FastifyPluginAsync = async (app) => {
       return reply.forbidden('You do not have access to this rule');
     }
 
-    const wasInactivityRule = existingRule.type === 'account_inactivity';
+    const wasInactivityRule = hasInactivityCondition(existingRule.conditions);
 
     // Delete rule (cascade will handle violations)
     await db.delete(rules).where(eq(rules.id, id));

@@ -8,7 +8,12 @@
 import { Queue, Worker, type Job, type ConnectionOptions } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { eq, and, isNull } from 'drizzle-orm';
-import type { Rule, AccountInactivityParams, ViolationWithDetails } from '@tracearr/shared';
+import type {
+  Rule,
+  AccountInactivityParams,
+  ViolationWithDetails,
+  RuleConditions,
+} from '@tracearr/shared';
 import { WS_EVENTS, TIME_MS } from '@tracearr/shared';
 import { db } from '../db/client.js';
 import { rules, serverUsers, violations, users, servers } from '../db/schema.js';
@@ -28,6 +33,34 @@ const STARTUP_DELAY_MS = 5 * TIME_MS.MINUTE;
 interface InactivityCheckJobData {
   type: 'check';
   ruleId?: string; // If set, only check this specific rule
+}
+
+/**
+ * Check if V2 rule conditions contain an inactive_days field.
+ */
+export function hasInactivityCondition(conditions: RuleConditions | null): boolean {
+  if (!conditions?.groups) return false;
+  return conditions.groups.some((group) =>
+    group.conditions.some((c) => c.field === 'inactive_days')
+  );
+}
+
+/**
+ * Extract the inactive_days threshold from V2 conditions.
+ * Returns the value of the first inactive_days condition found, or null.
+ */
+export function extractInactiveDaysFromConditions(
+  conditions: RuleConditions | null
+): number | null {
+  if (!conditions?.groups) return null;
+  for (const group of conditions.groups) {
+    for (const c of group.conditions) {
+      if (c.field === 'inactive_days' && typeof c.value === 'number') {
+        return c.value;
+      }
+    }
+  }
+  return null;
 }
 
 // Connection options (set during initialization)
@@ -141,13 +174,16 @@ export async function scheduleInactivityChecks(): Promise<void> {
     }
   }
 
-  // Get all active account_inactivity rules
-  const activeRules = await db
+  // Get all active rules and filter for inactivity conditions in app code
+  const candidateRules = await db
     .select({
       id: rules.id,
+      conditions: rules.conditions,
     })
     .from(rules)
-    .where(and(eq(rules.isActive, true), eq(rules.type, 'account_inactivity')));
+    .where(eq(rules.isActive, true));
+
+  const activeRules = candidateRules.filter((r) => hasInactivityCondition(r.conditions));
 
   if (activeRules.length === 0) {
     console.log('[Inactivity] No active inactivity rules found');
@@ -202,17 +238,13 @@ export async function triggerInactivityCheck(ruleId?: string): Promise<void> {
 async function processInactivityCheck(job: Job<InactivityCheckJobData>): Promise<void> {
   console.log(`[Inactivity] Processing check (job ${job.id})`);
 
-  // Get all active account_inactivity rules (or a specific one if ruleId is set)
-  const ruleQuery = db
+  // Get all active rules and filter for inactivity conditions
+  const candidateRules = await db
     .select()
     .from(rules)
-    .where(
-      job.data.ruleId
-        ? and(eq(rules.id, job.data.ruleId), eq(rules.type, 'account_inactivity'))
-        : and(eq(rules.isActive, true), eq(rules.type, 'account_inactivity'))
-    );
+    .where(job.data.ruleId ? eq(rules.id, job.data.ruleId) : eq(rules.isActive, true));
 
-  const activeRules = await ruleQuery;
+  const activeRules = candidateRules.filter((r) => hasInactivityCondition(r.conditions));
 
   if (activeRules.length === 0) {
     console.log('[Inactivity] No active inactivity rules to check');
@@ -222,7 +254,15 @@ async function processInactivityCheck(job: Job<InactivityCheckJobData>): Promise
   let totalViolations = 0;
 
   for (const rule of activeRules) {
-    const params = rule.params as unknown as AccountInactivityParams;
+    const days = extractInactiveDaysFromConditions(rule.conditions);
+    if (days === null) {
+      console.warn(
+        `[Inactivity] Could not extract inactive_days from rule ${rule.name} (${rule.id}), skipping`
+      );
+      continue;
+    }
+    const params: AccountInactivityParams = { inactivityValue: days, inactivityUnit: 'days' };
+
     console.log(`[Inactivity] Checking rule: ${rule.name} (${rule.id})`);
 
     // Get users to check based on rule scope
