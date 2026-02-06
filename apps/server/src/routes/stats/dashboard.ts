@@ -19,6 +19,7 @@ import {
   filterByServerAccess,
   validateServerAccess,
   buildServerAccessCondition,
+  buildServerFilterFragment,
 } from '../../utils/serverFiltering.js';
 import { getCacheService } from '../../services/cache.js';
 import { getStartOfDayInTimezone } from './utils.js';
@@ -147,40 +148,8 @@ export const dashboardRoutes: FastifyPluginAsync = async (app) => {
         return conditions;
       };
 
-      // Build server filter SQL for violations (via serverUsers join)
-      const buildViolationServerFilter = () => {
-        if (serverId) {
-          return sql`AND su.server_id = ${serverId}`;
-        }
-        if (authUser.role !== 'owner') {
-          if (authUser.serverIds.length === 0) {
-            return sql`AND false`;
-          } else if (authUser.serverIds.length === 1) {
-            return sql`AND su.server_id = ${authUser.serverIds[0]}`;
-          } else {
-            const serverIdList = authUser.serverIds.map((id: string) => sql`${id}`);
-            return sql`AND su.server_id IN (${sql.join(serverIdList, sql`, `)})`;
-          }
-        }
-        return sql``;
-      };
-
-      const buildSessionServerFilter = () => {
-        if (serverId) {
-          return sql`AND server_id = ${serverId}`;
-        }
-        if (authUser.role !== 'owner') {
-          if (authUser.serverIds.length === 0) {
-            return sql`AND false`;
-          } else if (authUser.serverIds.length === 1) {
-            return sql`AND server_id = ${authUser.serverIds[0]}`;
-          } else {
-            const serverIdList = authUser.serverIds.map((id: string) => sql`${id}`);
-            return sql`AND server_id IN (${sql.join(serverIdList, sql`, `)})`;
-          }
-        }
-        return sql``;
-      };
+      const violationServerFilter = buildServerFilterFragment(serverId, authUser, 'su.server_id');
+      const sessionServerFilter = buildServerFilterFragment(serverId, authUser);
 
       // Execute dynamic queries in parallel
       const [
@@ -214,7 +183,7 @@ export const dashboardRoutes: FastifyPluginAsync = async (app) => {
             FROM violations v
             INNER JOIN server_users su ON su.id = v.server_user_id
             WHERE v.created_at >= ${last24h}
-            ${buildViolationServerFilter()}
+            ${violationServerFilter}
           `
           )
           .then((r) => [{ count: (r.rows[0] as { count: number })?.count ?? 0 }]),
@@ -233,7 +202,7 @@ export const dashboardRoutes: FastifyPluginAsync = async (app) => {
             WHERE (started_at AT TIME ZONE ${tz})::date = (NOW() AT TIME ZONE ${tz})::date
               AND duration_ms >= ${MIN_PLAY_DURATION_MS}
               ${MEDIA_TYPE_SQL_FILTER}
-            ${buildSessionServerFilter()}
+            ${sessionServerFilter}
           `),
       ]);
 

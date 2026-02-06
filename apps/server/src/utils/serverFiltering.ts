@@ -154,3 +154,35 @@ export function validateServerAccess(authUser: AuthUser, serverId: string): stri
   }
   return 'You do not have access to this server';
 }
+
+/**
+ * Build a raw SQL fragment for server filtering in hand-written queries.
+ *
+ * Returns an `AND ...` clause (or empty SQL for owners with no serverId filter).
+ * Use this in raw SQL template literals where Drizzle query builder isn't available.
+ *
+ * @param serverId - Optional explicit server ID filter (from query params)
+ * @param authUser - The authenticated user with role and serverIds
+ * @param columnRef - The column reference string (e.g. 'server_id', 'su.server_id')
+ */
+export function buildServerFilterFragment(
+  serverId: string | undefined,
+  authUser: { role: string; serverIds: string[] },
+  columnRef = 'server_id'
+): SQL {
+  const col = sql.raw(columnRef);
+  if (serverId) {
+    return sql`AND ${col} = ${serverId}`;
+  }
+  if (authUser.role !== 'owner') {
+    if (authUser.serverIds.length === 0) {
+      return sql`AND false`;
+    }
+    if (authUser.serverIds.length === 1) {
+      return sql`AND ${col} = ${authUser.serverIds[0]}`;
+    }
+    const ids = authUser.serverIds.map((id) => sql`${id}`);
+    return sql`AND ${col} IN (${sql.join(ids, sql`, `)})`;
+  }
+  return sql``;
+}

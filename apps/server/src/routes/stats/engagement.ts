@@ -27,39 +27,7 @@ import {
 } from '@tracearr/shared';
 import { db } from '../../db/client.js';
 import { resolveDateRange } from './utils.js';
-import { validateServerAccess } from '../../utils/serverFiltering.js';
-
-// UUID validation regex for defensive checks
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * Build SQL server filter fragment for raw queries.
- * Note: serverId should be pre-validated by schema (uuidSchema) but we add defensive checks.
- */
-function buildServerFilterSql(
-  serverId: string | undefined,
-  authUser: { role: string; serverIds: string[] }
-): ReturnType<typeof sql> {
-  if (serverId) {
-    if (!UUID_REGEX.test(serverId)) {
-      return sql`AND false`; // Invalid UUID, return no results
-    }
-    return sql`AND server_id = ${serverId}::uuid`;
-  }
-  if (authUser.role !== 'owner') {
-    // Filter to only valid UUIDs from auth context
-    const validServerIds = authUser.serverIds.filter((id) => UUID_REGEX.test(id));
-    if (validServerIds.length === 0) {
-      return sql`AND false`;
-    } else if (validServerIds.length === 1) {
-      return sql`AND server_id = ${validServerIds[0]}::uuid`;
-    } else {
-      const serverIdList = validServerIds.map((id) => sql`${id}::uuid`);
-      return sql`AND server_id IN (${sql.join(serverIdList, sql`, `)})`;
-    }
-  }
-  return sql``;
-}
+import { validateServerAccess, buildServerFilterFragment } from '../../utils/serverFiltering.js';
 
 export const engagementRoutes: FastifyPluginAsync = async (app) => {
   /**
@@ -90,7 +58,7 @@ export const engagementRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const serverFilter = buildServerFilterSql(serverId, authUser);
+    const serverFilter = buildServerFilterFragment(serverId, authUser);
     // Note: The continuous aggregate buckets by UTC day, so we truncate input dates
     // to UTC day boundaries to ensure correct bucket matching
     const dailyStartFilter = dateRange.start
@@ -102,16 +70,11 @@ export const engagementRoutes: FastifyPluginAsync = async (app) => {
         : sql``;
     const mediaTypeFilter = mediaType ? sql`AND media_type = ${mediaType}` : sql``;
 
-    // Run all queries in parallel
-    // Note: Queries aggregate from daily_content_engagement to support date filtering
-    const [
-      topContentResult,
-      topShowsResult,
-      tierBreakdownResult,
-      userProfilesResult,
-      summaryResult,
-    ] = await Promise.all([
-      // Top content by plays (aggregated from daily with date filter)
+    // Run combined + shows queries in parallel (2 instead of 5)
+    // The combined query computes filtered_daily and content_agg once, then branches
+    // into top_content, tier_breakdown, user_profiles, and summary as JSON columns.
+    // Shows query stays separate because it needs the daily_intensity CTE.
+    const [combinedResult, topShowsResult] = await Promise.all([
       db.execute(sql`
           WITH filtered_daily AS (
             SELECT * FROM daily_content_engagement
@@ -138,6 +101,11 @@ export const engagementRoutes: FastifyPluginAsync = async (app) => {
               END AS plays,
               CASE
                 WHEN MAX(content_duration_ms) > 0 THEN
+                  ROUND(100.0 * SUM(watched_ms) / MAX(content_duration_ms), 1)
+                ELSE 0
+              END AS completion_pct,
+              CASE
+                WHEN MAX(content_duration_ms) > 0 THEN
                   CASE
                     WHEN SUM(watched_ms) >= MAX(content_duration_ms) * 2.0 THEN 'rewatched'
                     WHEN SUM(watched_ms) >= MAX(content_duration_ms) * 1.0 THEN 'finished'
@@ -150,35 +118,110 @@ export const engagementRoutes: FastifyPluginAsync = async (app) => {
               END AS engagement_tier
             FROM filtered_daily
             GROUP BY server_user_id, rating_key
+          ),
+          top_content_data AS (
+            SELECT
+              rating_key,
+              media_title,
+              show_title,
+              media_type,
+              thumb_path,
+              server_id,
+              year,
+              SUM(plays) AS total_plays,
+              ROUND(SUM(cumulative_watched_ms) / 1000.0 / 60 / 60, 1) AS total_watch_hours,
+              COUNT(DISTINCT server_user_id) AS unique_viewers,
+              SUM(valid_sessions) AS valid_sessions,
+              SUM(total_sessions) AS total_sessions,
+              COUNT(*) FILTER (WHERE engagement_tier IN ('completed', 'finished', 'rewatched')) AS completions,
+              COUNT(*) FILTER (WHERE engagement_tier = 'rewatched') AS rewatches,
+              COUNT(*) FILTER (WHERE engagement_tier = 'abandoned') AS abandonments,
+              ROUND(100.0 * COUNT(*) FILTER (WHERE engagement_tier IN ('completed', 'finished', 'rewatched'))
+                    / NULLIF(COUNT(*), 0), 1) AS completion_rate,
+              ROUND(100.0 * COUNT(*) FILTER (WHERE engagement_tier = 'abandoned')
+                    / NULLIF(COUNT(*), 0), 1) AS abandonment_rate
+            FROM content_agg
+            WHERE true ${mediaTypeFilter}
+            GROUP BY rating_key, media_title, show_title, media_type, content_duration_ms, thumb_path, server_id, year
+            ORDER BY total_plays DESC
+            LIMIT ${limit}
+          ),
+          tier_breakdown_data AS (
+            SELECT
+              engagement_tier AS tier,
+              COUNT(*)::int AS count
+            FROM content_agg
+            WHERE engagement_tier != 'unknown'
+            GROUP BY engagement_tier
+          ),
+          user_agg AS (
+            SELECT
+              server_user_id,
+              COUNT(DISTINCT rating_key) AS content_started,
+              SUM(plays) AS total_plays,
+              SUM(cumulative_watched_ms)::bigint AS total_watched_ms,
+              ROUND(SUM(cumulative_watched_ms) / 1000.0 / 60 / 60, 1) AS total_watch_hours,
+              SUM(valid_sessions) AS valid_session_count,
+              SUM(total_sessions) AS total_session_count,
+              COUNT(*) FILTER (WHERE engagement_tier = 'abandoned') AS abandoned_count,
+              COUNT(*) FILTER (WHERE engagement_tier = 'sampled') AS sampled_count,
+              COUNT(*) FILTER (WHERE engagement_tier = 'engaged') AS engaged_count,
+              COUNT(*) FILTER (WHERE engagement_tier IN ('completed', 'finished')) AS completed_count,
+              COUNT(*) FILTER (WHERE engagement_tier = 'rewatched') AS rewatched_count,
+              ROUND(100.0 * COUNT(*) FILTER (WHERE engagement_tier IN ('completed', 'finished', 'rewatched'))
+                    / NULLIF(COUNT(*), 0), 1) AS completion_rate,
+              CASE
+                WHEN COUNT(*) = 0 THEN 'inactive'
+                WHEN COUNT(*) FILTER (WHERE engagement_tier = 'rewatched') > COUNT(*) * 0.2 THEN 'rewatcher'
+                WHEN COUNT(*) FILTER (WHERE engagement_tier IN ('completed', 'finished', 'rewatched')) > COUNT(*) * 0.7 THEN 'completionist'
+                WHEN COUNT(*) FILTER (WHERE engagement_tier = 'abandoned') > COUNT(*) * 0.5 THEN 'sampler'
+                ELSE 'casual'
+              END AS behavior_type,
+              MODE() WITHIN GROUP (ORDER BY media_type) AS favorite_media_type
+            FROM content_agg
+            GROUP BY server_user_id
+          ),
+          user_profiles_data AS (
+            SELECT
+              u.server_user_id,
+              su.username,
+              su.thumb_url,
+              usr.name AS identity_name,
+              u.content_started,
+              u.total_plays,
+              u.total_watch_hours,
+              u.valid_session_count,
+              u.total_session_count,
+              u.abandoned_count,
+              u.sampled_count,
+              u.engaged_count,
+              u.completed_count,
+              u.rewatched_count,
+              u.completion_rate,
+              u.behavior_type,
+              u.favorite_media_type
+            FROM user_agg u
+            JOIN server_users su ON u.server_user_id = su.id
+            LEFT JOIN users usr ON su.user_id = usr.id
+            ORDER BY u.total_plays DESC
+            LIMIT 20
+          ),
+          summary_data AS (
+            SELECT
+              COALESCE(SUM(plays), 0)::bigint AS total_plays,
+              COALESCE(SUM(valid_sessions), 0)::bigint AS total_valid_sessions,
+              COALESCE(SUM(total_sessions), 0)::bigint AS total_all_sessions,
+              ROUND(AVG(completion_pct), 1) AS avg_completion_rate
+            FROM content_agg
           )
           SELECT
-            rating_key,
-            media_title,
-            show_title,
-            media_type,
-            thumb_path,
-            server_id,
-            year,
-            SUM(plays) AS total_plays,
-            ROUND(SUM(cumulative_watched_ms) / 1000.0 / 60 / 60, 1) AS total_watch_hours,
-            COUNT(DISTINCT server_user_id) AS unique_viewers,
-            SUM(valid_sessions) AS valid_sessions,
-            SUM(total_sessions) AS total_sessions,
-            COUNT(*) FILTER (WHERE engagement_tier IN ('completed', 'finished', 'rewatched')) AS completions,
-            COUNT(*) FILTER (WHERE engagement_tier = 'rewatched') AS rewatches,
-            COUNT(*) FILTER (WHERE engagement_tier = 'abandoned') AS abandonments,
-            ROUND(100.0 * COUNT(*) FILTER (WHERE engagement_tier IN ('completed', 'finished', 'rewatched'))
-                  / NULLIF(COUNT(*), 0), 1) AS completion_rate,
-            ROUND(100.0 * COUNT(*) FILTER (WHERE engagement_tier = 'abandoned')
-                  / NULLIF(COUNT(*), 0), 1) AS abandonment_rate
-          FROM content_agg
-          WHERE true ${mediaTypeFilter}
-          GROUP BY rating_key, media_title, show_title, media_type, content_duration_ms, thumb_path, server_id, year
-          ORDER BY total_plays DESC
-          LIMIT ${limit}
+            (SELECT COALESCE(json_agg(row_to_json(t)), '[]') FROM top_content_data t) AS top_content,
+            (SELECT COALESCE(json_agg(row_to_json(t)), '[]') FROM tier_breakdown_data t) AS tier_breakdown,
+            (SELECT COALESCE(json_agg(row_to_json(t)), '[]') FROM user_profiles_data t) AS user_profiles,
+            (SELECT row_to_json(t) FROM summary_data t) AS summary
         `),
 
-      // Top shows (aggregated from daily with date filter)
+      // Top shows — separate query (needs daily_intensity CTE)
       db.execute(sql`
           WITH filtered_daily AS (
             SELECT * FROM daily_content_engagement
@@ -288,187 +331,63 @@ export const engagementRoutes: FastifyPluginAsync = async (app) => {
           ORDER BY total_episode_views DESC
           LIMIT ${limit}
         `),
-
-      // Engagement tier breakdown (from daily with date filter)
-      db.execute(sql`
-          WITH filtered_daily AS (
-            SELECT * FROM daily_content_engagement
-            WHERE ${dailyStartFilter} ${dailyEndFilter} ${serverFilter}
-          ),
-          content_agg AS (
-            SELECT
-              server_user_id,
-              rating_key,
-              MAX(content_duration_ms) AS content_duration_ms,
-              SUM(watched_ms) AS cumulative_watched_ms,
-              CASE
-                WHEN MAX(content_duration_ms) > 0 THEN
-                  CASE
-                    WHEN SUM(watched_ms) >= MAX(content_duration_ms) * 2.0 THEN 'rewatched'
-                    WHEN SUM(watched_ms) >= MAX(content_duration_ms) * 1.0 THEN 'finished'
-                    WHEN SUM(watched_ms) >= MAX(content_duration_ms) * 0.8 THEN 'completed'
-                    WHEN SUM(watched_ms) >= MAX(content_duration_ms) * 0.5 THEN 'engaged'
-                    WHEN SUM(watched_ms) >= MAX(content_duration_ms) * 0.2 THEN 'sampled'
-                    ELSE 'abandoned'
-                  END
-                ELSE 'unknown'
-              END AS engagement_tier
-            FROM filtered_daily
-            GROUP BY server_user_id, rating_key
-          )
-          SELECT
-            engagement_tier as tier,
-            COUNT(*)::int as count
-          FROM content_agg
-          WHERE engagement_tier != 'unknown'
-          GROUP BY engagement_tier
-        `),
-
-      // User engagement profiles (top 20, from daily with date filter)
-      db.execute(sql`
-          WITH filtered_daily AS (
-            SELECT * FROM daily_content_engagement
-            WHERE ${dailyStartFilter} ${dailyEndFilter} ${serverFilter}
-          ),
-          content_agg AS (
-            SELECT
-              server_user_id,
-              rating_key,
-              MAX(media_type) AS media_type,
-              MAX(content_duration_ms) AS content_duration_ms,
-              SUM(watched_ms) AS cumulative_watched_ms,
-              SUM(valid_session_count) AS valid_sessions,
-              SUM(total_session_count) AS total_sessions,
-              CASE
-                WHEN MAX(content_duration_ms) > 0 THEN
-                  GREATEST(0, FLOOR(SUM(watched_ms)::float / MAX(content_duration_ms)))::int
-                ELSE 0
-              END AS plays,
-              CASE
-                WHEN MAX(content_duration_ms) > 0 THEN
-                  CASE
-                    WHEN SUM(watched_ms) >= MAX(content_duration_ms) * 2.0 THEN 'rewatched'
-                    WHEN SUM(watched_ms) >= MAX(content_duration_ms) * 1.0 THEN 'finished'
-                    WHEN SUM(watched_ms) >= MAX(content_duration_ms) * 0.8 THEN 'completed'
-                    WHEN SUM(watched_ms) >= MAX(content_duration_ms) * 0.5 THEN 'engaged'
-                    WHEN SUM(watched_ms) >= MAX(content_duration_ms) * 0.2 THEN 'sampled'
-                    ELSE 'abandoned'
-                  END
-                ELSE 'unknown'
-              END AS engagement_tier
-            FROM filtered_daily
-            GROUP BY server_user_id, rating_key
-          ),
-          user_agg AS (
-            SELECT
-              server_user_id,
-              COUNT(DISTINCT rating_key) AS content_started,
-              SUM(plays) AS total_plays,
-              SUM(cumulative_watched_ms)::bigint AS total_watched_ms,
-              ROUND(SUM(cumulative_watched_ms) / 1000.0 / 60 / 60, 1) AS total_watch_hours,
-              SUM(valid_sessions) AS valid_session_count,
-              SUM(total_sessions) AS total_session_count,
-              COUNT(*) FILTER (WHERE engagement_tier = 'abandoned') AS abandoned_count,
-              COUNT(*) FILTER (WHERE engagement_tier = 'sampled') AS sampled_count,
-              COUNT(*) FILTER (WHERE engagement_tier = 'engaged') AS engaged_count,
-              COUNT(*) FILTER (WHERE engagement_tier IN ('completed', 'finished')) AS completed_count,
-              COUNT(*) FILTER (WHERE engagement_tier = 'rewatched') AS rewatched_count,
-              ROUND(100.0 * COUNT(*) FILTER (WHERE engagement_tier IN ('completed', 'finished', 'rewatched'))
-                    / NULLIF(COUNT(*), 0), 1) AS completion_rate,
-              CASE
-                WHEN COUNT(*) = 0 THEN 'inactive'
-                WHEN COUNT(*) FILTER (WHERE engagement_tier = 'rewatched') > COUNT(*) * 0.2 THEN 'rewatcher'
-                WHEN COUNT(*) FILTER (WHERE engagement_tier IN ('completed', 'finished', 'rewatched')) > COUNT(*) * 0.7 THEN 'completionist'
-                WHEN COUNT(*) FILTER (WHERE engagement_tier = 'abandoned') > COUNT(*) * 0.5 THEN 'sampler'
-                ELSE 'casual'
-              END AS behavior_type,
-              MODE() WITHIN GROUP (ORDER BY media_type) AS favorite_media_type
-            FROM content_agg
-            GROUP BY server_user_id
-          )
-          SELECT
-            u.server_user_id,
-            su.username,
-            su.thumb_url,
-            usr.name as identity_name,
-            u.content_started,
-            u.total_plays,
-            u.total_watch_hours,
-            u.valid_session_count,
-            u.total_session_count,
-            u.abandoned_count,
-            u.sampled_count,
-            u.engaged_count,
-            u.completed_count,
-            u.rewatched_count,
-            u.completion_rate,
-            u.behavior_type,
-            u.favorite_media_type
-          FROM user_agg u
-          JOIN server_users su ON u.server_user_id = su.id
-          LEFT JOIN users usr ON su.user_id = usr.id
-          ORDER BY u.total_plays DESC
-          LIMIT 20
-        `),
-
-      // Summary metrics (from daily with date filter)
-      db.execute(sql`
-          WITH filtered_daily AS (
-            SELECT * FROM daily_content_engagement
-            WHERE ${dailyStartFilter} ${dailyEndFilter} ${serverFilter}
-          ),
-          content_agg AS (
-            SELECT
-              server_user_id,
-              rating_key,
-              MAX(content_duration_ms) AS content_duration_ms,
-              SUM(watched_ms) AS cumulative_watched_ms,
-              SUM(valid_session_count) AS valid_sessions,
-              SUM(total_session_count) AS total_sessions,
-              CASE
-                WHEN MAX(content_duration_ms) > 0 THEN
-                  GREATEST(0, FLOOR(SUM(watched_ms)::float / MAX(content_duration_ms)))::int
-                ELSE 0
-              END AS plays,
-              CASE
-                WHEN MAX(content_duration_ms) > 0 THEN
-                  ROUND(100.0 * SUM(watched_ms) / MAX(content_duration_ms), 1)
-                ELSE 0
-              END AS completion_pct
-            FROM filtered_daily
-            GROUP BY server_user_id, rating_key
-          )
-          SELECT
-            COALESCE(SUM(plays), 0)::bigint as total_plays,
-            COALESCE(SUM(valid_sessions), 0)::bigint as total_valid_sessions,
-            COALESCE(SUM(total_sessions), 0)::bigint as total_all_sessions,
-            ROUND(AVG(completion_pct), 1) as avg_completion_rate
-          FROM content_agg
-        `),
     ]);
 
-    // Transform top content results
-    const topContent: TopContentEngagement[] = (
-      topContentResult.rows as {
-        rating_key: string;
-        media_title: string;
-        show_title: string | null;
-        media_type: string;
-        thumb_path: string | null;
-        server_id: string | null;
-        year: number | null;
-        total_plays: string;
-        total_watch_hours: string;
-        unique_viewers: string;
-        valid_sessions: string;
-        total_sessions: string;
-        completions: string;
-        rewatches: string;
-        abandonments: string;
-        completion_rate: string;
-        abandonment_rate: string;
-      }[]
-    ).map((row) => ({
+    // Parse combined query results from JSON columns
+    const combinedRow = combinedResult.rows[0] as {
+      top_content: unknown;
+      tier_breakdown: unknown;
+      user_profiles: unknown;
+      summary: unknown;
+    };
+    const topContentRows = combinedRow.top_content as {
+      rating_key: string;
+      media_title: string;
+      show_title: string | null;
+      media_type: string;
+      thumb_path: string | null;
+      server_id: string | null;
+      year: number | null;
+      total_plays: number;
+      total_watch_hours: number;
+      unique_viewers: number;
+      valid_sessions: number;
+      total_sessions: number;
+      completions: number;
+      rewatches: number;
+      abandonments: number;
+      completion_rate: number;
+      abandonment_rate: number;
+    }[];
+    const tierRows = combinedRow.tier_breakdown as { tier: EngagementTier; count: number }[];
+    const userProfileRows = combinedRow.user_profiles as {
+      server_user_id: string;
+      username: string;
+      thumb_url: string | null;
+      identity_name: string | null;
+      content_started: number;
+      total_plays: number;
+      total_watch_hours: number;
+      valid_session_count: number;
+      total_session_count: number;
+      abandoned_count: number;
+      sampled_count: number;
+      engaged_count: number;
+      completed_count: number;
+      rewatched_count: number;
+      completion_rate: number;
+      behavior_type: UserBehaviorType;
+      favorite_media_type: string | null;
+    }[];
+    const summaryRow = combinedRow.summary as {
+      total_plays: string;
+      total_valid_sessions: string;
+      total_all_sessions: string;
+      avg_completion_rate: string | null;
+    };
+
+    // Transform top content results (already parsed from JSON)
+    const topContent: TopContentEngagement[] = topContentRows.map((row) => ({
       ratingKey: row.rating_key,
       title: row.media_title,
       showTitle: row.show_title,
@@ -520,7 +439,7 @@ export const engagementRoutes: FastifyPluginAsync = async (app) => {
     }));
 
     // Calculate engagement tier breakdown with percentages
-    const tierCounts = tierBreakdownResult.rows as { tier: EngagementTier; count: number }[];
+    const tierCounts = tierRows;
     const totalTierCount = tierCounts.reduce((sum, t) => sum + t.count, 0);
     const engagementBreakdown: EngagementTierBreakdown[] = tierCounts.map((t) => ({
       tier: t.tier,
@@ -528,28 +447,8 @@ export const engagementRoutes: FastifyPluginAsync = async (app) => {
       percentage: totalTierCount > 0 ? Math.round((t.count / totalTierCount) * 1000) / 10 : 0,
     }));
 
-    // Transform user profiles
-    const userProfiles: UserEngagementProfile[] = (
-      userProfilesResult.rows as {
-        server_user_id: string;
-        username: string;
-        thumb_url: string | null;
-        identity_name: string | null;
-        content_started: string;
-        total_plays: string;
-        total_watch_hours: string;
-        valid_session_count: string;
-        total_session_count: string;
-        abandoned_count: string;
-        sampled_count: string;
-        engaged_count: string;
-        completed_count: string;
-        rewatched_count: string;
-        completion_rate: string;
-        behavior_type: UserBehaviorType;
-        favorite_media_type: string | null;
-      }[]
-    ).map((row) => ({
+    // Transform user profiles (already parsed from JSON)
+    const userProfiles: UserEngagementProfile[] = userProfileRows.map((row) => ({
       serverUserId: row.server_user_id,
       username: row.username,
       thumbUrl: row.thumb_url,
@@ -569,14 +468,7 @@ export const engagementRoutes: FastifyPluginAsync = async (app) => {
       favoriteMediaType: row.favorite_media_type as UserEngagementProfile['favoriteMediaType'],
     }));
 
-    // Calculate summary
-    const summaryRow = summaryResult.rows[0] as {
-      total_plays: string;
-      total_valid_sessions: string;
-      total_all_sessions: string;
-      avg_completion_rate: string | null;
-    };
-
+    // Calculate summary (summaryRow already parsed from JSON above)
     const totalPlays = Number(summaryRow.total_plays);
     const totalValidSessions = Number(summaryRow.total_valid_sessions);
     const totalAllSessions = Number(summaryRow.total_all_sessions);
@@ -629,7 +521,7 @@ export const engagementRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const serverFilter = buildServerFilterSql(serverId, authUser);
+    const serverFilter = buildServerFilterFragment(serverId, authUser);
 
     // Map orderBy to SQL column
     const orderColumn = {

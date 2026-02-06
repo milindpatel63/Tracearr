@@ -2,7 +2,6 @@
  * Engagement statistics route tests
  *
  * Tests the engagement statistics endpoints:
- * - buildServerFilterSql function (UUID validation, security)
  * - GET /engagement - Comprehensive engagement metrics
  * - GET /shows - Show-level stats with episode rollup
  */
@@ -20,10 +19,14 @@ vi.mock('../../../db/client.js', () => ({
   },
 }));
 
-// Mock validateServerAccess
-vi.mock('../../../utils/serverFiltering.js', () => ({
-  validateServerAccess: vi.fn(),
-}));
+// Mock server filtering utilities
+vi.mock('../../../utils/serverFiltering.js', async () => {
+  const { sql } = await import('drizzle-orm');
+  return {
+    validateServerAccess: vi.fn(),
+    buildServerFilterFragment: vi.fn(() => sql``),
+  };
+});
 
 // Mock resolveDateRange
 vi.mock('../utils.js', () => ({
@@ -48,9 +51,6 @@ vi.mock('../utils.js', () => ({
 import { db } from '../../../db/client.js';
 import { validateServerAccess } from '../../../utils/serverFiltering.js';
 import { engagementRoutes } from '../engagement.js';
-
-// Import buildServerFilterSql by re-exporting it or testing indirectly through routes
-// Since it's not exported, we'll test it through route behavior
 
 /**
  * Helper to create a test Fastify instance with authentication
@@ -86,28 +86,66 @@ function createViewerUser(serverIds: string[]): AuthUser {
   };
 }
 
-// Mock engagement query results
+// Mock engagement query results — 2 queries: combined (JSON columns) + shows
 function mockEngagementResults() {
-  const topContentResult = {
+  const combinedResult = {
     rows: [
       {
-        rating_key: 'movie-123',
-        media_title: 'Test Movie',
-        show_title: null,
-        media_type: 'movie',
-        thumb_path: '/thumb.jpg',
-        server_id: randomUUID(),
-        year: 2024,
-        total_plays: '50',
-        total_watch_hours: '25.5',
-        unique_viewers: '10',
-        valid_sessions: '45',
-        total_sessions: '60',
-        completions: '40',
-        rewatches: '5',
-        abandonments: '5',
-        completion_rate: '80.0',
-        abandonment_rate: '10.0',
+        top_content: [
+          {
+            rating_key: 'movie-123',
+            media_title: 'Test Movie',
+            show_title: null,
+            media_type: 'movie',
+            thumb_path: '/thumb.jpg',
+            server_id: randomUUID(),
+            year: 2024,
+            total_plays: 50,
+            total_watch_hours: 25.5,
+            unique_viewers: 10,
+            valid_sessions: 45,
+            total_sessions: 60,
+            completions: 40,
+            rewatches: 5,
+            abandonments: 5,
+            completion_rate: 80.0,
+            abandonment_rate: 10.0,
+          },
+        ],
+        tier_breakdown: [
+          { tier: 'finished', count: 30 },
+          { tier: 'completed', count: 20 },
+          { tier: 'engaged', count: 15 },
+          { tier: 'sampled', count: 10 },
+          { tier: 'abandoned', count: 5 },
+        ],
+        user_profiles: [
+          {
+            server_user_id: randomUUID(),
+            username: 'testuser',
+            thumb_url: '/user-thumb.jpg',
+            identity_name: 'Test User',
+            content_started: 50,
+            total_plays: 100,
+            total_watch_hours: 40.5,
+            valid_session_count: 90,
+            total_session_count: 110,
+            abandoned_count: 5,
+            sampled_count: 10,
+            engaged_count: 15,
+            completed_count: 15,
+            rewatched_count: 5,
+            completion_rate: 70.0,
+            behavior_type: 'completionist',
+            favorite_media_type: 'movie',
+          },
+        ],
+        summary: {
+          total_plays: '500',
+          total_valid_sessions: '450',
+          total_all_sessions: '600',
+          avg_completion_rate: '75.5',
+        },
       },
     ],
   };
@@ -131,52 +169,7 @@ function mockEngagementResults() {
     ],
   };
 
-  const tierBreakdownResult = {
-    rows: [
-      { tier: 'finished', count: 30 },
-      { tier: 'completed', count: 20 },
-      { tier: 'engaged', count: 15 },
-      { tier: 'sampled', count: 10 },
-      { tier: 'abandoned', count: 5 },
-    ],
-  };
-
-  const userProfilesResult = {
-    rows: [
-      {
-        server_user_id: randomUUID(),
-        username: 'testuser',
-        thumb_url: '/user-thumb.jpg',
-        identity_name: 'Test User',
-        content_started: '50',
-        total_plays: '100',
-        total_watch_hours: '40.5',
-        valid_session_count: '90',
-        total_session_count: '110',
-        abandoned_count: '5',
-        sampled_count: '10',
-        engaged_count: '15',
-        completed_count: '15',
-        rewatched_count: '5',
-        completion_rate: '70.0',
-        behavior_type: 'completionist',
-        favorite_media_type: 'movie',
-      },
-    ],
-  };
-
-  const summaryResult = {
-    rows: [
-      {
-        total_plays: '500',
-        total_valid_sessions: '450',
-        total_all_sessions: '600',
-        avg_completion_rate: '75.5',
-      },
-    ],
-  };
-
-  return [topContentResult, topShowsResult, tierBreakdownResult, userProfilesResult, summaryResult];
+  return [combinedResult, topShowsResult];
 }
 
 describe('Engagement Routes', () => {
@@ -192,8 +185,8 @@ describe('Engagement Routes', () => {
     }
   });
 
-  describe('buildServerFilterSql function (tested indirectly)', () => {
-    describe('UUID validation security', () => {
+  describe('Server filtering (via shared buildServerFilterFragment)', () => {
+    describe('Schema validation security', () => {
       it('should reject malformed UUID in serverId', async () => {
         const ownerUser = createOwnerUser();
         app = await buildTestApp(ownerUser);
@@ -232,13 +225,10 @@ describe('Engagement Routes', () => {
 
         vi.mocked(validateServerAccess).mockReturnValue(null);
 
-        // Mock all 5 db.execute calls for the engagement endpoint
+        // Mock the 2 db.execute calls for the engagement endpoint (combined + shows)
         const mockResults = mockEngagementResults();
         vi.mocked(db.execute).mockResolvedValueOnce(mockResults[0] as never);
         vi.mocked(db.execute).mockResolvedValueOnce(mockResults[1] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[2] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[3] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[4] as never);
 
         const response = await app.inject({
           method: 'GET',
@@ -258,9 +248,6 @@ describe('Engagement Routes', () => {
         const mockResults = mockEngagementResults();
         vi.mocked(db.execute).mockResolvedValueOnce(mockResults[0] as never);
         vi.mocked(db.execute).mockResolvedValueOnce(mockResults[1] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[2] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[3] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[4] as never);
 
         const response = await app.inject({
           method: 'GET',
@@ -280,9 +267,6 @@ describe('Engagement Routes', () => {
         const mockResults = mockEngagementResults();
         vi.mocked(db.execute).mockResolvedValueOnce(mockResults[0] as never);
         vi.mocked(db.execute).mockResolvedValueOnce(mockResults[1] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[2] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[3] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[4] as never);
 
         const response = await app.inject({
           method: 'GET',
@@ -302,9 +286,6 @@ describe('Engagement Routes', () => {
         const mockResults = mockEngagementResults();
         vi.mocked(db.execute).mockResolvedValueOnce(mockResults[0] as never);
         vi.mocked(db.execute).mockResolvedValueOnce(mockResults[1] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[2] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[3] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[4] as never);
 
         const response = await app.inject({
           method: 'GET',
@@ -322,9 +303,6 @@ describe('Engagement Routes', () => {
         const mockResults = mockEngagementResults();
         vi.mocked(db.execute).mockResolvedValueOnce(mockResults[0] as never);
         vi.mocked(db.execute).mockResolvedValueOnce(mockResults[1] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[2] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[3] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[4] as never);
 
         const response = await app.inject({
           method: 'GET',
@@ -335,26 +313,23 @@ describe('Engagement Routes', () => {
         // Should apply "AND false" filter, returning no results
       });
 
-      it('should reject invalid UUID in serverIds array', async () => {
-        // This tests the defensive UUID validation in buildServerFilterSql
-        // Even if serverIds contains invalid UUIDs, they should be filtered out
+      it('should handle non-owner with invalid serverIds gracefully', async () => {
+        // UUID validation is handled upstream by Zod schema, but serverIds from auth
+        // context are passed through to buildServerFilterFragment as-is
         const viewerUser = createViewerUser(['invalid-uuid', 'also-invalid']);
         app = await buildTestApp(viewerUser);
 
         const mockResults = mockEngagementResults();
         vi.mocked(db.execute).mockResolvedValueOnce(mockResults[0] as never);
         vi.mocked(db.execute).mockResolvedValueOnce(mockResults[1] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[2] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[3] as never);
-        vi.mocked(db.execute).mockResolvedValueOnce(mockResults[4] as never);
 
         const response = await app.inject({
           method: 'GET',
           url: '/stats/engagement',
         });
 
+        // buildServerFilterFragment is mocked to return sql``, so this succeeds
         expect(response.statusCode).toBe(200);
-        // Should filter out invalid UUIDs and apply "AND false"
       });
     });
   });

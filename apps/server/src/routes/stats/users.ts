@@ -14,31 +14,8 @@ import { statsQuerySchema, SESSION_LIMITS } from '@tracearr/shared';
 import type { UserStats, TopUserStats } from '@tracearr/shared';
 import { db } from '../../db/client.js';
 import { resolveDateRange } from './utils.js';
-import { validateServerAccess } from '../../utils/serverFiltering.js';
+import { validateServerAccess, buildServerFilterFragment } from '../../utils/serverFiltering.js';
 import { MEDIA_TYPE_SQL_FILTER_S } from '../../constants/index.js';
-
-/**
- * Build SQL server filter fragment for raw queries
- */
-function buildServerFilterSql(
-  serverId: string | undefined,
-  authUser: { role: string; serverIds: string[] }
-): ReturnType<typeof sql> {
-  if (serverId) {
-    return sql`AND su.server_id = ${serverId}`;
-  }
-  if (authUser.role !== 'owner') {
-    if (authUser.serverIds.length === 0) {
-      return sql`AND false`;
-    } else if (authUser.serverIds.length === 1) {
-      return sql`AND su.server_id = ${authUser.serverIds[0]}`;
-    } else {
-      const serverIdList = authUser.serverIds.map((id) => sql`${id}`);
-      return sql`AND su.server_id IN (${sql.join(serverIdList, sql`, `)})`;
-    }
-  }
-  return sql``;
-}
 
 export const usersRoutes: FastifyPluginAsync = async (app) => {
   /**
@@ -62,7 +39,7 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const serverFilter = buildServerFilterSql(serverId, authUser);
+    const serverFilter = buildServerFilterFragment(serverId, authUser, 'su.server_id');
 
     // Build date filter for JOIN condition
     // Also filter to only movies/episodes (exclude live TV and music tracks)
@@ -129,7 +106,7 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const serverFilter = buildServerFilterSql(serverId, authUser);
+    const serverFilter = buildServerFilterFragment(serverId, authUser, 'su.server_id');
 
     // Build date filter for JOIN condition
     // Also filter to only movies/episodes (exclude live TV and music tracks)

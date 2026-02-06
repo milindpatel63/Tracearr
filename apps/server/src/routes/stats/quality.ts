@@ -12,30 +12,7 @@ import { qualityStatsSince } from '../../db/prepared.js';
 import { db } from '../../db/client.js';
 import { resolveDateRange } from './utils.js';
 import { MEDIA_TYPE_SQL_FILTER } from '../../constants/index.js';
-import { validateServerAccess } from '../../utils/serverFiltering.js';
-
-/**
- * Build SQL server filter fragment for sessions table queries.
- */
-function buildSessionServerFilter(
-  serverId: string | undefined,
-  authUser: { role: string; serverIds: string[] }
-): ReturnType<typeof sql> {
-  if (serverId) {
-    return sql`AND server_id = ${serverId}`;
-  }
-  if (authUser.role !== 'owner') {
-    if (authUser.serverIds.length === 0) {
-      return sql`AND false`;
-    } else if (authUser.serverIds.length === 1) {
-      return sql`AND server_id = ${authUser.serverIds[0]}`;
-    } else {
-      const serverIdList = authUser.serverIds.map((id) => sql`${id}`);
-      return sql`AND server_id IN (${sql.join(serverIdList, sql`, `)})`;
-    }
-  }
-  return sql``;
-}
+import { validateServerAccess, buildServerFilterFragment } from '../../utils/serverFiltering.js';
 
 export const qualityRoutes: FastifyPluginAsync = async (app) => {
   /**
@@ -60,7 +37,7 @@ export const qualityRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const serverFilter = buildSessionServerFilter(serverId, authUser);
+    const serverFilter = buildServerFilterFragment(serverId, authUser);
     const needsServerFilter = serverId || authUser.role !== 'owner';
 
     let qualityStats: { isTranscode: boolean | null; count: number }[];

@@ -19,7 +19,7 @@ import {
   type LibraryDuplicatesQueryInput,
 } from '@tracearr/shared';
 import { db } from '../../db/client.js';
-import { validateServerAccess } from '../../utils/serverFiltering.js';
+import { validateServerAccess, buildServerFilterFragment } from '../../utils/serverFiltering.js';
 import { buildLibraryCacheKey } from './utils.js';
 
 /** Match type for duplicate groups */
@@ -96,30 +96,6 @@ interface ItemDetailsRow {
   video_resolution: string | null;
 }
 
-/**
- * Build SQL filter for accessible servers (handles non-owner role restrictions).
- * Returns both the SQL fragment and a flag indicating if filtering is needed.
- */
-function buildServerAccessFilter(authUser: { role: string; serverIds: string[] }): {
-  sql: ReturnType<typeof sql>;
-  isRestricted: boolean;
-} {
-  if (authUser.role !== 'owner') {
-    if (authUser.serverIds.length === 0) {
-      return { sql: sql`AND false`, isRestricted: true };
-    } else if (authUser.serverIds.length === 1) {
-      return { sql: sql`AND server_id = ${authUser.serverIds[0]}`, isRestricted: true };
-    } else {
-      const serverIdList = authUser.serverIds.map((id: string) => sql`${id}`);
-      return {
-        sql: sql`AND server_id IN (${sql.join(serverIdList, sql`, `)})`,
-        isRestricted: true,
-      };
-    }
-  }
-  return { sql: sql``, isRestricted: false };
-}
-
 export const libraryDuplicatesRoute: FastifyPluginAsync = async (app) => {
   /**
    * GET /duplicates - Cross-server duplicate detection
@@ -165,7 +141,8 @@ export const libraryDuplicatesRoute: FastifyPluginAsync = async (app) => {
       }
 
       // Build server access filter for non-owner roles
-      const serverAccessFilter = buildServerAccessFilter(authUser);
+      const serverFilterSql = buildServerFilterFragment(undefined, authUser);
+      const isRestricted = authUser.role !== 'owner';
 
       // Optional media type filter
       const mediaTypeFilter = mediaType ? sql`AND media_type = ${mediaType}` : sql``;
@@ -188,7 +165,7 @@ export const libraryDuplicatesRoute: FastifyPluginAsync = async (app) => {
             COUNT(DISTINCT server_id) AS server_count
           FROM library_items
           WHERE imdb_id IS NOT NULL
-            ${serverAccessFilter.sql}
+            ${serverFilterSql}
             ${mediaTypeFilter}
           GROUP BY imdb_id
           ${serverInvolvementFilter}
@@ -204,7 +181,7 @@ export const libraryDuplicatesRoute: FastifyPluginAsync = async (app) => {
           FROM library_items
           WHERE tmdb_id IS NOT NULL
             AND imdb_id IS NULL  -- Only items not already matched by IMDB
-            ${serverAccessFilter.sql}
+            ${serverFilterSql}
             ${mediaTypeFilter}
           GROUP BY tmdb_id
           ${serverInvolvementFilter}
@@ -221,7 +198,7 @@ export const libraryDuplicatesRoute: FastifyPluginAsync = async (app) => {
           WHERE tvdb_id IS NOT NULL
             AND imdb_id IS NULL
             AND tmdb_id IS NULL
-            ${serverAccessFilter.sql}
+            ${serverFilterSql}
             ${mediaTypeFilter}
           GROUP BY tvdb_id
           ${serverInvolvementFilter}
@@ -245,14 +222,14 @@ export const libraryDuplicatesRoute: FastifyPluginAsync = async (app) => {
       if (includeFuzzy && minConfidence <= 70) {
         // Build server filter for fuzzy query (need to apply to both a and b tables)
         const fuzzyServerFilterA =
-          serverAccessFilter.isRestricted && authUser.serverIds.length > 0
+          isRestricted && authUser.serverIds.length > 0
             ? sql`AND a.server_id IN (${sql.join(
                 authUser.serverIds.map((id: string) => sql`${id}::uuid`),
                 sql`, `
               )})`
             : sql``;
         const fuzzyServerFilterB =
-          serverAccessFilter.isRestricted && authUser.serverIds.length > 0
+          isRestricted && authUser.serverIds.length > 0
             ? sql`AND b.server_id IN (${sql.join(
                 authUser.serverIds.map((id: string) => sql`${id}::uuid`),
                 sql`, `

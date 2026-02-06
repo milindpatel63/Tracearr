@@ -11,37 +11,12 @@ import { statsQuerySchema } from '@tracearr/shared';
 import { db } from '../../db/client.js';
 import '../../db/schema.js';
 import { resolveDateRange } from './utils.js';
-import { validateServerAccess } from '../../utils/serverFiltering.js';
+import { validateServerAccess, buildServerFilterFragment } from '../../utils/serverFiltering.js';
 
 // Extended schema with minSessions filter
 const deviceCompatibilitySchema = statsQuerySchema.safeExtend({
   minSessions: z.coerce.number().int().min(1).default(5),
 });
-
-/**
- * Build SQL server filter fragment for raw queries
- */
-function buildServerFilterSql(
-  serverId: string | undefined,
-  authUser: { role: string; serverIds: string[] },
-  tableAlias?: string
-): ReturnType<typeof sql> {
-  const col = tableAlias ? sql.raw(`${tableAlias}.server_id`) : sql.raw('server_id');
-  if (serverId) {
-    return sql`AND ${col} = ${serverId}`;
-  }
-  if (authUser.role !== 'owner') {
-    if (authUser.serverIds.length === 0) {
-      return sql`AND false`;
-    } else if (authUser.serverIds.length === 1) {
-      return sql`AND ${col} = ${authUser.serverIds[0]}`;
-    } else {
-      const serverIdList = authUser.serverIds.map((id) => sql`${id}`);
-      return sql`AND ${col} IN (${sql.join(serverIdList, sql`, `)})`;
-    }
-  }
-  return sql``;
-}
 
 export const devicesRoutes: FastifyPluginAsync = async (app) => {
   /**
@@ -69,7 +44,7 @@ export const devicesRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const serverFilter = buildServerFilterSql(serverId, authUser);
+    const serverFilter = buildServerFilterFragment(serverId, authUser);
 
     // For all-time queries, we need a base WHERE clause
     const baseWhere = dateRange.start
@@ -185,7 +160,7 @@ export const devicesRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
-      const serverFilter = buildServerFilterSql(serverId, authUser);
+      const serverFilter = buildServerFilterFragment(serverId, authUser);
 
       // For all-time queries, we need a base WHERE clause
       const baseWhere = dateRange.start
@@ -281,7 +256,7 @@ export const devicesRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
-      const serverFilter = buildServerFilterSql(serverId, authUser);
+      const serverFilter = buildServerFilterFragment(serverId, authUser);
       const baseWhere = dateRange.start
         ? sql`WHERE started_at >= ${dateRange.start}`
         : sql`WHERE true`;
@@ -352,7 +327,7 @@ export const devicesRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
-      const serverFilter = buildServerFilterSql(serverId, authUser);
+      const serverFilter = buildServerFilterFragment(serverId, authUser);
       const baseWhere = dateRange.start
         ? sql`WHERE started_at >= ${dateRange.start}`
         : sql`WHERE true`;
@@ -433,7 +408,7 @@ export const devicesRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
-      const serverFilter = buildServerFilterSql(serverId, authUser, 's');
+      const serverFilter = buildServerFilterFragment(serverId, authUser, 's.server_id');
       const baseWhere = dateRange.start
         ? sql`WHERE s.started_at >= ${dateRange.start}`
         : sql`WHERE true`;
