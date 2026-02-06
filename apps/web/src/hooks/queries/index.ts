@@ -80,6 +80,7 @@ export {
 // Violation hooks
 export {
   useViolations,
+  useViolation,
   useAcknowledgeViolation,
   useDismissViolation,
   useBulkAcknowledgeViolations,

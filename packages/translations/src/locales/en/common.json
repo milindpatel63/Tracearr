@@ -72,7 +72,8 @@
     "disconnected": "Disconnected",
     "saving": "Saving...",
     "deleting": "Deleting...",
-    "dismissing": "Dismissing..."
+    "dismissing": "Dismissing...",
+    "acknowledging": "Acknowledging..."
   },
   "playback": {
     "playing": "Playing",
@@ -146,7 +147,8 @@
     "pausedTime": "Paused Time",
     "sessionDetails": "Session Details",
     "recentSessions": "Recent Sessions",
-    "activeStreams": "Active Streams"
+    "activeStreams": "Active Streams",
+    "days": "days"
   },
   "search": {
     "placeholder": "Search...",

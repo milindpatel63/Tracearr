@@ -751,6 +751,7 @@ class ApiClient {
 
   // Violations
   violations = {
+    get: (id: string) => this.request<ViolationWithDetails>(`/violations/${id}`),
     list: (params?: {
       page?: number;
       pageSize?: number;

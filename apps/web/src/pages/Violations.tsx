@@ -1,11 +1,10 @@
 import { useState, useCallback, useMemo } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type SortingState } from '@/components/ui/data-table';
 import { Button } from '@/components/ui/button';
 import { SeverityBadge } from '@/components/violations/SeverityBadge';
-import { ViolationDetailDialog } from '@/components/violations/ViolationDetailDialog';
 import { getAvatarUrl } from '@/components/users/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BulkActionsToolbar, type BulkAction } from '@/components/ui/bulk-actions-toolbar';
@@ -24,19 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  User,
-  AlertTriangle,
-  Check,
-  X,
-  Filter,
-  MapPin,
-  Users,
-  Zap,
-  Shield,
-  Globe,
-  Trash2,
-} from 'lucide-react';
+import { User, AlertTriangle, Check, X, Filter, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { ViolationWithDetails, ViolationSeverity, ViolationSortField } from '@tracearr/shared';
@@ -50,13 +37,7 @@ import {
 import { useServer } from '@/hooks/useServer';
 import { useRowSelection } from '@/hooks/useRowSelection';
 
-const ruleIcons: Record<string, React.ReactNode> = {
-  impossible_travel: <MapPin className="h-4 w-4" />,
-  simultaneous_locations: <Users className="h-4 w-4" />,
-  device_velocity: <Zap className="h-4 w-4" />,
-  concurrent_streams: <Shield className="h-4 w-4" />,
-  geo_restriction: <Globe className="h-4 w-4" />,
-};
+import { ruleIcons } from '@/components/violations/ruleIcons';
 
 // Map DataTable column IDs to API sort field names
 const columnToSortField: Record<string, ViolationSortField> = {
@@ -68,6 +49,7 @@ const columnToSortField: Record<string, ViolationSortField> = {
 
 export function Violations() {
   const { t } = useTranslation(['pages', 'common']);
+  const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [sorting, setSorting] = useState<SortingState>([{ id: 'createdAt', desc: true }]);
   const [severityFilter, setSeverityFilter] = useState<ViolationSeverity | 'all'>('all');
@@ -75,7 +57,6 @@ export function Violations() {
     'all'
   );
   const [dismissId, setDismissId] = useState<string | null>(null);
-  const [selectedViolation, setSelectedViolation] = useState<ViolationWithDetails | null>(null);
   const [bulkDismissConfirmOpen, setBulkDismissConfirmOpen] = useState(false);
   const pageSize = 10;
   const { selectedServerId } = useServer();
@@ -140,7 +121,6 @@ export function Violations() {
       dismissViolation.mutate(violationId, {
         onSuccess: () => {
           setDismissId(null);
-          setSelectedViolation(null);
         },
       });
     }
@@ -445,7 +425,7 @@ export function Violations() {
               onSortingChange={handleSortingChange}
               isServerFiltered
               onRowClick={(violation) => {
-                setSelectedViolation(violation);
+                void navigate(`/violations/${violation.id}`);
               }}
               emptyMessage={t('violations.noViolationsFound')}
               selectable
@@ -468,21 +448,6 @@ export function Violations() {
         totalCount={total}
         actions={bulkActions}
         onClearSelection={clearSelection}
-      />
-
-      {/* Violation Detail Dialog */}
-      <ViolationDetailDialog
-        violation={selectedViolation}
-        open={!!selectedViolation}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSelectedViolation(null);
-          }
-        }}
-        onAcknowledge={handleAcknowledge}
-        onDismiss={handleDismiss}
-        isAcknowledging={acknowledgeViolation.isPending}
-        isDismissing={dismissViolation.isPending}
       />
 
       {/* Dismiss Confirmation Dialog */}

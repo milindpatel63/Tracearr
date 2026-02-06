@@ -115,7 +115,26 @@
     "noViolationsFound": "No violations found",
     "noViolationsRecorded": "No violations have been recorded yet.",
     "allSeverities": "All Severities",
-    "allStatuses": "All Statuses"
+    "allStatuses": "All Statuses",
+    "detail": {
+      "notFound": "Violation not found",
+      "violationDetails": "Violation Details",
+      "userInfo": "User",
+      "sessions": "Sessions",
+      "noSessions": "No sessions associated with this violation",
+      "trigger": "Trigger",
+      "map": "Session Locations",
+      "actions": "Actions Taken",
+      "timestamps": "Timestamps",
+      "created": "Created",
+      "acknowledged": "Acknowledged",
+      "detected": "Detected",
+      "inactivity": "Inactivity Details",
+      "daysInactive": "Days Inactive",
+      "threshold": "Threshold",
+      "lastActivity": "Last Activity",
+      "neverActive": "Never active"
+    }
   },
   "rules": {
     "title": "Rules",

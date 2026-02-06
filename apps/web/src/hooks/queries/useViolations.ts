@@ -28,6 +28,15 @@ export function useViolations(params: ViolationsParams = {}) {
   });
 }
 
+export function useViolation(id: string) {
+  return useQuery({
+    queryKey: ['violations', 'detail', id],
+    queryFn: () => api.violations.get(id),
+    enabled: !!id,
+    staleTime: 1000 * 30,
+  });
+}
+
 export function useAcknowledgeViolation() {
   const { t } = useTranslation('notifications');
   const queryClient = useQueryClient();

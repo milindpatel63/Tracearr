@@ -14,6 +14,7 @@ import { Users } from '@/pages/Users';
 import { UserDetail } from '@/pages/UserDetail';
 import { Rules } from '@/pages/Rules';
 import { Violations } from '@/pages/Violations';
+import { ViolationDetail } from '@/pages/ViolationDetail';
 import { History } from '@/pages/History';
 import { Settings } from '@/pages/Settings';
 import { ApiDocs } from '@/pages/ApiDocs';
@@ -66,6 +67,7 @@ export function App() {
           <Route path="users/:id" element={<UserDetail />} />
           <Route path="rules" element={<Rules />} />
           <Route path="violations" element={<Violations />} />
+          <Route path="violations/:id" element={<ViolationDetail />} />
           <Route path="settings/*" element={<Settings />} />
           <Route path="api-docs" element={<ApiDocs />} />
 
