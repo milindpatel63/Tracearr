@@ -40,7 +40,7 @@ vi.mock('../../../db/client.js', () => ({
 
 // Mock schema tables - use importOriginal to preserve transitive exports
 vi.mock('../../../db/schema.js', async (importOriginal) => {
-  const actual: typeof import('../../../db/schema.js') = await importOriginal();
+  const actual: Awaited<ReturnType<typeof importOriginal>> = await importOriginal();
   return {
     ...actual,
   };
@@ -49,7 +49,7 @@ vi.mock('../../../db/schema.js', async (importOriginal) => {
 // Mock rules engine
 const mockEvaluateRulesAsync = vi.fn();
 vi.mock('../../../services/rules/engine.js', async (importOriginal) => {
-  const actual: typeof import('../../../services/rules/engine.js') = await importOriginal();
+  const actual: Awaited<ReturnType<typeof importOriginal>> = await importOriginal();
   return {
     ...actual,
     evaluateRulesAsync: (...args: unknown[]) => mockEvaluateRulesAsync(...args),
