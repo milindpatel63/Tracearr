@@ -104,7 +104,7 @@ async function enrichViolations(violationData: ViolationRow[]) {
   // Collect all relatedSessionIds from violation data for direct lookup
   const allRelatedSessionIds = new Set<string>();
   for (const v of violationsNeedingData) {
-    const relatedIds = (v.data.relatedSessionIds as string[]) || [];
+    const relatedIds = (v.data?.relatedSessionIds as string[] | undefined) ?? [];
     for (const id of relatedIds) {
       allRelatedSessionIds.add(id);
     }
@@ -423,7 +423,7 @@ async function enrichViolations(violationData: ViolationRow[]) {
   return violationData.map((v) => {
     // Fetch related sessions - prioritize using relatedSessionIds from violation data
     // This is more accurate than time-based queries
-    const relatedSessionIdsFromData = (v.data.relatedSessionIds as string[]) || [];
+    const relatedSessionIdsFromData = (v.data?.relatedSessionIds as string[] | undefined) ?? [];
 
     let relatedSessions: ViolationSessionInfo[] = [];
     if (relatedSessionIdsFromData.length > 0) {
