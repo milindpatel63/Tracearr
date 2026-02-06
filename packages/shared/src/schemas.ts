@@ -440,7 +440,7 @@ export const notificationChannelV2Schema = z.enum(['push', 'discord', 'email', '
 export const createViolationActionSchema = z.object({
   type: z.literal('create_violation'),
   severity: z.enum(['low', 'warning', 'high']),
-  cooldown_minutes: z.number().int().positive().optional(),
+  cooldown_minutes: z.number().int().nonnegative().optional(),
 });
 
 export const logOnlyActionSchema = z.object({
@@ -451,7 +451,7 @@ export const logOnlyActionSchema = z.object({
 export const notifyActionSchema = z.object({
   type: z.literal('notify'),
   channels: z.array(notificationChannelV2Schema).min(1),
-  cooldown_minutes: z.number().int().positive().optional(),
+  cooldown_minutes: z.number().int().nonnegative().optional(),
 });
 
 export const adjustTrustActionSchema = z.object({
@@ -482,7 +482,7 @@ export const killStreamActionSchema = z.object({
   type: z.literal('kill_stream'),
   delay_seconds: z.number().int().min(0).max(300).optional(),
   require_confirmation: z.boolean().optional(),
-  cooldown_minutes: z.number().int().positive().optional(),
+  cooldown_minutes: z.number().int().nonnegative().optional(),
   /** Message to display to user before termination. If omitted, terminates silently. */
   message: z.string().min(1).max(500).optional(),
   target: sessionTargetSchema.optional(),
