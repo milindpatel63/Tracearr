@@ -16,7 +16,8 @@ import {
   Pause,
   Square,
   MonitorPlay,
-  Repeat2,
+  Zap,
+  Cpu,
   Globe,
   Clock,
   ArrowUpDown,
@@ -366,24 +367,29 @@ export const HistoryTableRow = forwardRef<
       {/* Quality */}
       {columnVisibility.quality && (
         <TableCell className="w-[110px]">
-          <Badge variant={session.isTranscode ? 'warning' : 'secondary'} className="gap-1 text-xs">
-            {session.isTranscode ? (
-              <>
-                <Repeat2 className="h-3 w-3" />
-                Transcode
-              </>
-            ) : session.videoDecision === 'copy' || session.audioDecision === 'copy' ? (
-              <>
+          {(() => {
+            const isHwTranscode =
+              session.isTranscode &&
+              !!(session.transcodeInfo?.hwEncoding || session.transcodeInfo?.hwDecoding);
+
+            if (session.isTranscode) {
+              return (
+                <Badge variant="warning" className="gap-1 text-xs">
+                  {isHwTranscode ? <Cpu className="h-3 w-3" /> : <Zap className="h-3 w-3" />}
+                  Transcode
+                </Badge>
+              );
+            }
+
+            return (
+              <Badge variant="secondary" className="gap-1 text-xs">
                 <MonitorPlay className="h-3 w-3" />
-                Direct Stream
-              </>
-            ) : (
-              <>
-                <MonitorPlay className="h-3 w-3" />
-                Direct Play
-              </>
-            )}
-          </Badge>
+                {session.videoDecision === 'copy' || session.audioDecision === 'copy'
+                  ? 'Direct Stream'
+                  : 'Direct Play'}
+              </Badge>
+            );
+          })()}
         </TableCell>
       )}
 

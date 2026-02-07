@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Monitor, Smartphone, Tablet, Tv, Play, Pause, Zap, Server, X } from 'lucide-react';
+import { Monitor, Smartphone, Tablet, Tv, Play, Pause, Zap, Cpu, Server, X } from 'lucide-react';
 import { getAvatarUrl } from '@/components/users/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -138,21 +138,32 @@ export function NowPlayingCard({ session, onClick }: NowPlayingCardProps) {
 
             <div className="flex items-center gap-1.5">
               {/* Quality badge */}
-              <Badge
-                variant={session.isTranscode ? 'secondary' : 'default'}
-                className={cn('text-xs', !session.isTranscode && 'bg-green-600 hover:bg-green-700')}
-              >
-                {session.isTranscode ? (
-                  <>
-                    <Zap className="mr-1 h-3 w-3" />
-                    Transcode
-                  </>
-                ) : session.videoDecision === 'copy' || session.audioDecision === 'copy' ? (
-                  'Direct Stream'
-                ) : (
-                  'Direct Play'
-                )}
-              </Badge>
+              {(() => {
+                const isHwTranscode =
+                  session.isTranscode &&
+                  !!(session.transcodeInfo?.hwEncoding || session.transcodeInfo?.hwDecoding);
+
+                if (session.isTranscode) {
+                  return (
+                    <Badge variant="warning" className="text-xs">
+                      {isHwTranscode ? (
+                        <Cpu className="mr-1 h-3 w-3" />
+                      ) : (
+                        <Zap className="mr-1 h-3 w-3" />
+                      )}
+                      Transcode
+                    </Badge>
+                  );
+                }
+
+                return (
+                  <Badge variant="default" className="bg-green-600 text-xs hover:bg-green-700">
+                    {session.videoDecision === 'copy' || session.audioDecision === 'copy'
+                      ? 'Direct Stream'
+                      : 'Direct Play'}
+                  </Badge>
+                );
+              })()}
 
               {/* Device icon */}
               <div className="bg-muted flex h-6 w-6 items-center justify-center rounded-md">

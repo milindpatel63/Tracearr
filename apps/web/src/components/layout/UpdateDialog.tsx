@@ -104,7 +104,7 @@ export function UpdateDialog({ open, onOpenChange, version }: UpdateDialogProps)
           {/* Release notes */}
           {latest.releaseNotes && (
             <div className="space-y-2">
-              <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+              <div className="text-foreground text-sm font-semibold">
                 {t('settings:update.releaseNotes')}
               </div>
               <ScrollArea className="h-48 rounded-md border p-3">

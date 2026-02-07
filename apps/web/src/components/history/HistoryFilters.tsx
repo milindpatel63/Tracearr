@@ -10,7 +10,7 @@ import {
   Music,
   Radio,
   MonitorPlay,
-  Repeat2,
+  Zap,
   X,
   Search,
   ListFilter,
@@ -257,7 +257,7 @@ export function HistoryFiltersBar({
           decisionLabels.length > 2
             ? `${decisionLabels.length} selected`
             : decisionLabels.join(', '),
-        icon: filters.transcodeDecisions.includes('transcode') ? Repeat2 : MonitorPlay,
+        icon: filters.transcodeDecisions.includes('transcode') ? Zap : MonitorPlay,
       });
     }
 
@@ -575,7 +575,7 @@ export function HistoryFiltersBar({
             {[
               { value: 'directplay' as const, label: 'Direct Play', icon: MonitorPlay },
               { value: 'copy' as const, label: 'Direct Stream', icon: MonitorPlay },
-              { value: 'transcode' as const, label: 'Transcode', icon: Repeat2 },
+              { value: 'transcode' as const, label: 'Transcode', icon: Zap },
             ].map(({ value, label, icon: Icon }) => {
               const isSelected = filters.transcodeDecisions?.includes(value) ?? false;
               return (

@@ -59,7 +59,7 @@ function AgentOptionButton({ agentInfo, onSelect }: AgentOptionButtonProps) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="font-medium">{config.name}</p>
-        <p className="text-muted-foreground truncate text-xs">
+        <p className="text-muted-foreground text-xs">
           {isDisabled ? agentInfo.unavailableReason : config.description}
         </p>
       </div>
@@ -229,7 +229,7 @@ export function AddAgentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{t('pages:settings.notifications.addAgent')}</DialogTitle>
           <DialogDescription>{t('pages:settings.notifications.addAgentDesc')}</DialogDescription>
@@ -249,20 +249,24 @@ export function AddAgentDialog({
 
               {/* Webhook agents group */}
               {webhookAgents.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-border h-px flex-1" />
                     <span className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
                       {t('pages:settings.notifications.webhookAgents')}
                     </span>
                     <div className="bg-border h-px flex-1" />
                   </div>
                   {activeWebhookAgent && (
-                    <p className="text-muted-foreground text-xs">
-                      {t('pages:settings.notifications.oneWebhookLimit')}{' '}
-                      {t('pages:settings.notifications.currentlyConfigured', {
-                        name: AGENT_CONFIGS[activeWebhookAgent].name,
-                      })}
-                    </p>
+                    <div className="bg-muted/50 text-muted-foreground flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
+                      <Lock className="mt-0.5 h-3 w-3 flex-shrink-0" />
+                      <span>
+                        {t('pages:settings.notifications.oneWebhookLimit')}{' '}
+                        {t('pages:settings.notifications.currentlyConfigured', {
+                          name: AGENT_CONFIGS[activeWebhookAgent].name,
+                        })}
+                      </span>
+                    </div>
                   )}
                   <div className="space-y-2">
                     {webhookAgents.map((agentInfo) => (

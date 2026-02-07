@@ -25,7 +25,8 @@ import {
   Pause,
   Square,
   MonitorPlay,
-  Repeat2,
+  Zap,
+  Cpu,
   Globe,
   Eye,
   Server,
@@ -474,45 +475,48 @@ export function SessionDetailSheet({ session, open, onOpenChange }: Props) {
           <Section
             icon={Gauge}
             title="Stream Details"
-            badge={
-              <Badge
-                variant={session.isTranscode ? 'warning' : 'secondary'}
-                className="gap-1 text-xs"
-              >
-                {session.isTranscode ? (
-                  hasTranscodeReason ? (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="flex items-center gap-1">
-                            <Repeat2 className="h-3 w-3" />
-                            Transcode
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-xs text-left">
-                          <span className="text-[11px]">{transcodeReasonText}</span>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  ) : (
-                    <>
-                      <Repeat2 className="h-3 w-3" />
-                      Transcode
-                    </>
-                  )
-                ) : session.videoDecision === 'copy' || session.audioDecision === 'copy' ? (
-                  <>
-                    <MonitorPlay className="h-3 w-3" />
-                    Direct Stream
-                  </>
-                ) : (
-                  <>
-                    <MonitorPlay className="h-3 w-3" />
-                    Direct Play
-                  </>
-                )}
-              </Badge>
-            }
+            badge={(() => {
+              const isHwTranscode =
+                session.isTranscode &&
+                !!(session.transcodeInfo?.hwEncoding || session.transcodeInfo?.hwDecoding);
+              const TranscodeIcon = isHwTranscode ? Cpu : Zap;
+
+              if (session.isTranscode) {
+                return (
+                  <Badge variant="warning" className="gap-1 text-xs">
+                    {hasTranscodeReason ? (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center gap-1">
+                              <TranscodeIcon className="h-3 w-3" />
+                              Transcode
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs text-left">
+                            <span className="text-[11px]">{transcodeReasonText}</span>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      <>
+                        <TranscodeIcon className="h-3 w-3" />
+                        Transcode
+                      </>
+                    )}
+                  </Badge>
+                );
+              }
+
+              return (
+                <Badge variant="secondary" className="gap-1 text-xs">
+                  <MonitorPlay className="h-3 w-3" />
+                  {session.videoDecision === 'copy' || session.audioDecision === 'copy'
+                    ? 'Direct Stream'
+                    : 'Direct Play'}
+                </Badge>
+              );
+            })()}
           >
             <StreamDetailsPanel
               sourceVideoCodec={session.sourceVideoCodec ?? null}
