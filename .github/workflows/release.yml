@@ -491,10 +491,14 @@ jobs:
       - name: Get tag annotation
         id: tag_info
         run: |
-          # Get the tag message (annotation)
-          TAG_MESSAGE=$(git tag -l --format='%(contents)' ${{ github.ref_name }})
-          # Write to file to preserve newlines
-          echo "$TAG_MESSAGE" > tag_message.txt
+          # Use subject+body to exclude GPG/SSH signatures from signed tags
+          SUBJECT=$(git tag -l --format='%(contents:subject)' ${{ github.ref_name }})
+          BODY=$(git tag -l --format='%(contents:body)' ${{ github.ref_name }})
+          if [ -n "$BODY" ]; then
+            printf '%s\n\n%s\n' "$SUBJECT" "$BODY" > tag_message.txt
+          else
+            echo "$SUBJECT" > tag_message.txt
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
