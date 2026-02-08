@@ -26,7 +26,25 @@ This is needed for EAS CLI to work. Get it from Expo:
 
 **Note**: Even though we're building locally (not on Expo's servers), EAS CLI still requires authentication.
 
-### 2. GOOGLE_MAPS_API_KEY (Optional)
+### 2. EAS_PROJECT_ID (Required for forks)
+
+The app is linked to the **original** Tracearr Expo project. Your `EXPO_TOKEN` cannot access it, so builds fail with "Entity not authorized". Use your own Expo project:
+
+1. Go to https://expo.dev and sign in (same account as your access token).
+2. Click **Create a project** (or use an existing one).
+3. Choose **Blank** or any template; we only need the project ID.
+4. Open the project → **Project settings** (or the project dashboard).
+5. Copy the **Project ID** (e.g. `a1b2c3d4-e5f6-7890-abcd-ef1234567890`).
+6. Add it to GitHub:
+   - **Settings** → **Secrets and variables** → **Actions**
+   - **New repository secret**
+   - Name: `EAS_PROJECT_ID`
+   - Value: paste the Project ID
+   - **Add secret**
+
+If you omit this, the workflow uses the upstream project and will fail unless you have access to it.
+
+### 3. GOOGLE_MAPS_API_KEY (Optional)
 
 Only needed if you want maps functionality in the app. If you don't have one, the build will still work but maps won't function.
 
@@ -68,7 +86,7 @@ Only needed if you want maps functionality in the app. If you don't have one, th
 7. **Add to GitHub**:
    - Go to your repo → **Settings** → **Secrets and variables** → **Actions**
    - Click **New repository secret**
-   - Name: `GOOGLE_MAPS_API_KEY`
+   - Name: `GOOGLE_MAPS_API_KEY` (same place as other secrets)
    - Value: Paste your API key
    - Click **Add secret**
 
