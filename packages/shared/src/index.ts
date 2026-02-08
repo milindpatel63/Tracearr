@@ -415,6 +415,8 @@ export {
   formatSpeed,
   formatBitrate,
   formatMediaTech,
+  getResolutionLabel,
+  formatAudioChannels,
   getDistanceUnit,
   getSpeedUnit,
   toMetricDistance,

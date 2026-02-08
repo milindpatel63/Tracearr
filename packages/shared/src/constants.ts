@@ -472,6 +472,66 @@ export function formatMediaTech(value: string | null | undefined): string {
   return MEDIA_TECH_DISPLAY[lower] ?? value.toUpperCase();
 }
 
+/**
+ * Get video resolution label from width and height.
+ * Uses width-first logic to correctly classify widescreen/cinemascope content
+ * (e.g., 1920x800 = 1080p, not 720p based on height alone).
+ *
+ * @param width - Video width in pixels
+ * @param height - Video height in pixels
+ * @returns Resolution label: "4K", "1080p", "720p", "480p", "SD", or null if unknown
+ *
+ * @example
+ * getResolutionLabel(3840, 2160) // "4K"
+ * getResolutionLabel(1920, 1080) // "1080p"
+ * getResolutionLabel(1920, 800)  // "1080p" (cinemascope)
+ * getResolutionLabel(1280, 720)  // "720p"
+ * getResolutionLabel(null, 1080) // "1080p" (fallback to height)
+ */
+export function getResolutionLabel(
+  width: number | null | undefined,
+  height: number | null | undefined
+): string | null {
+  // Prefer width-based classification (industry standard)
+  if (width) {
+    if (width >= 3840) return '4K';
+    if (width >= 1920) return '1080p';
+    if (width >= 1280) return '720p';
+    if (width >= 854) return '480p';
+    return 'SD';
+  }
+  // Fallback to height when width unavailable
+  if (height) {
+    if (height >= 2160) return '4K';
+    if (height >= 1080) return '1080p';
+    if (height >= 720) return '720p';
+    if (height >= 480) return '480p';
+    return 'SD';
+  }
+  return null;
+}
+
+/**
+ * Format audio channels for display.
+ *
+ * @param channels - Number of audio channels
+ * @returns Formatted string: "7.1", "5.1", "Stereo", "Mono", or "Nch"
+ *
+ * @example
+ * formatAudioChannels(8) // "7.1"
+ * formatAudioChannels(6) // "5.1"
+ * formatAudioChannels(2) // "Stereo"
+ * formatAudioChannels(1) // "Mono"
+ */
+export function formatAudioChannels(channels: number | null | undefined): string | null {
+  if (!channels) return null;
+  if (channels === 8) return '7.1';
+  if (channels === 6) return '5.1';
+  if (channels === 2) return 'Stereo';
+  if (channels === 1) return 'Mono';
+  return `${channels}ch`;
+}
+
 // Time constants in milliseconds (avoid magic numbers)
 export const TIME_MS = {
   SECOND: 1000,

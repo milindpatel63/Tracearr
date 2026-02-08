@@ -17,12 +17,46 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { eq, desc, sql, and, gte, isNull, isNotNull } from 'drizzle-orm';
 import { z } from 'zod';
-import { formatBitrate, booleanStringSchema, isValidTimezone } from '@tracearr/shared';
+import {
+  formatBitrate,
+  booleanStringSchema,
+  isValidTimezone,
+  getResolutionLabel,
+  formatAudioChannels,
+  formatMediaTech,
+  type SourceVideoDetails,
+  type SourceAudioDetails,
+  type StreamVideoDetails,
+  type StreamAudioDetails,
+  type TranscodeInfo,
+  type SubtitleInfo,
+} from '@tracearr/shared';
 import { db } from '../db/client.js';
 import { users, serverUsers, servers, sessions, violations, rules } from '../db/schema.js';
 import { getCacheService } from '../services/cache.js';
 import { generateOpenAPIDocument } from './public.openapi.js';
 import { buildPosterUrl, buildAvatarUrl } from '../services/imageProxy.js';
+
+interface StreamCodecData {
+  sourceVideoCodec: string | null;
+  sourceAudioCodec: string | null;
+  sourceAudioChannels: number | null;
+  sourceVideoWidth: number | null;
+  sourceVideoHeight: number | null;
+  streamVideoCodec: string | null;
+  streamAudioCodec: string | null;
+}
+
+function formatDisplayValues(data: StreamCodecData) {
+  return {
+    resolution: getResolutionLabel(data.sourceVideoWidth, data.sourceVideoHeight),
+    sourceVideoCodecDisplay: data.sourceVideoCodec ? formatMediaTech(data.sourceVideoCodec) : null,
+    sourceAudioCodecDisplay: data.sourceAudioCodec ? formatMediaTech(data.sourceAudioCodec) : null,
+    audioChannelsDisplay: formatAudioChannels(data.sourceAudioChannels),
+    streamVideoCodecDisplay: data.streamVideoCodec ? formatMediaTech(data.streamVideoCodec) : null,
+    streamAudioCodecDisplay: data.streamAudioCodec ? formatMediaTech(data.streamAudioCodec) : null,
+  };
+}
 
 // Pagination schema for public API
 const paginationSchema = z.object({
@@ -276,11 +310,9 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
           id: session.id,
           serverId: session.serverId,
           serverName: session.server.name,
-          // User info
           username: session.user.identityName ?? session.user.username,
           userThumb: session.user.thumbUrl,
           userAvatarUrl: buildAvatarUrl(session.serverId, session.user.thumbUrl),
-          // Media info
           mediaTitle: session.mediaTitle,
           mediaType: session.mediaType,
           showTitle: session.grandparentTitle,
@@ -290,16 +322,27 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
           thumbPath: session.thumbPath,
           posterUrl: buildPosterUrl(session.serverId, session.thumbPath),
           durationMs: session.totalDurationMs,
-          // Playback state
           state: session.state,
           progressMs: session.progressMs ?? 0,
           startedAt: session.startedAt,
-          // Transcode info
           isTranscode: session.isTranscode,
           videoDecision: session.videoDecision,
           audioDecision: session.audioDecision,
           bitrate: session.bitrate,
-          // Device info
+          sourceVideoCodec: session.sourceVideoCodec,
+          sourceAudioCodec: session.sourceAudioCodec,
+          sourceAudioChannels: session.sourceAudioChannels,
+          sourceVideoWidth: session.sourceVideoWidth,
+          sourceVideoHeight: session.sourceVideoHeight,
+          sourceVideoDetails: session.sourceVideoDetails,
+          sourceAudioDetails: session.sourceAudioDetails,
+          streamVideoCodec: session.streamVideoCodec,
+          streamAudioCodec: session.streamAudioCodec,
+          streamVideoDetails: session.streamVideoDetails,
+          streamAudioDetails: session.streamAudioDetails,
+          transcodeInfo: session.transcodeInfo,
+          subtitleInfo: session.subtitleInfo,
+          ...formatDisplayValues(session),
           device: session.device,
           player: session.playerName,
           product: session.product,
@@ -657,6 +700,19 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
         s.video_decision,
         s.audio_decision,
         s.bitrate,
+        s.source_video_codec,
+        s.source_audio_codec,
+        s.source_audio_channels,
+        s.source_video_width,
+        s.source_video_height,
+        s.source_video_details,
+        s.source_audio_details,
+        s.stream_video_codec,
+        s.stream_audio_codec,
+        s.stream_video_details,
+        s.stream_audio_details,
+        s.transcode_info,
+        s.subtitle_info,
         su.user_id,
         su.username as server_username,
         su.thumb_url as user_thumb_url,
@@ -699,6 +755,19 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
         video_decision: string | null;
         audio_decision: string | null;
         bitrate: number | null;
+        source_video_codec: string | null;
+        source_audio_codec: string | null;
+        source_audio_channels: number | null;
+        source_video_width: number | null;
+        source_video_height: number | null;
+        source_video_details: SourceVideoDetails | null;
+        source_audio_details: SourceAudioDetails | null;
+        stream_video_codec: string | null;
+        stream_audio_codec: string | null;
+        stream_video_details: StreamVideoDetails | null;
+        stream_audio_details: StreamAudioDetails | null;
+        transcode_info: TranscodeInfo | null;
+        subtitle_info: SubtitleInfo | null;
         user_id: string;
         server_username: string;
         user_thumb_url: string | null;
@@ -729,11 +798,32 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       player: row.player_name,
       product: row.product,
       platform: row.platform,
-      // Transcode info (matches /streams endpoint)
       isTranscode: row.is_transcode,
       videoDecision: row.video_decision,
       audioDecision: row.audio_decision,
       bitrate: row.bitrate,
+      sourceVideoCodec: row.source_video_codec,
+      sourceAudioCodec: row.source_audio_codec,
+      sourceAudioChannels: row.source_audio_channels,
+      sourceVideoWidth: row.source_video_width,
+      sourceVideoHeight: row.source_video_height,
+      sourceVideoDetails: row.source_video_details as SourceVideoDetails | null,
+      sourceAudioDetails: row.source_audio_details as SourceAudioDetails | null,
+      streamVideoCodec: row.stream_video_codec,
+      streamAudioCodec: row.stream_audio_codec,
+      streamVideoDetails: row.stream_video_details as StreamVideoDetails | null,
+      streamAudioDetails: row.stream_audio_details as StreamAudioDetails | null,
+      transcodeInfo: row.transcode_info as TranscodeInfo | null,
+      subtitleInfo: row.subtitle_info as SubtitleInfo | null,
+      ...formatDisplayValues({
+        sourceVideoCodec: row.source_video_codec,
+        sourceAudioCodec: row.source_audio_codec,
+        sourceAudioChannels: row.source_audio_channels,
+        sourceVideoWidth: row.source_video_width,
+        sourceVideoHeight: row.source_video_height,
+        streamVideoCodec: row.stream_video_codec,
+        streamAudioCodec: row.stream_audio_codec,
+      }),
       user: {
         id: row.user_id,
         username: row.user_name ?? row.server_username ?? row.user_username,

@@ -12,10 +12,8 @@ import {
 } from '@asteasolutions/zod-to-openapi';
 import { z } from 'zod';
 
-// Extend Zod with OpenAPI support (must be called before defining schemas)
 extendZodWithOpenApi(z);
 
-// Create registry for public API
 export const registry = new OpenAPIRegistry();
 
 // ============================================================================
@@ -25,26 +23,186 @@ export const registry = new OpenAPIRegistry();
 registry.registerComponent('securitySchemes', 'bearerAuth', {
   type: 'http',
   scheme: 'bearer',
-  description:
-    'API key in format: trr_pub_<token>. Generate from Settings > General in the Tracearr UI.',
+  description: 'API key format: trr_pub_<token>. Generate in Settings > General.',
 });
 
 // ============================================================================
-// Reusable Schemas
+// Shared Enums (single source of truth)
+// ============================================================================
+
+const ServerTypeEnum = z.enum(['plex', 'jellyfin', 'emby']);
+const MediaTypeEnum = z.enum(['movie', 'episode', 'track', 'live', 'photo', 'unknown']);
+const PlaybackStateEnum = z.enum(['playing', 'paused', 'stopped']);
+const SeverityEnum = z.enum(['low', 'warning', 'high']);
+const UserRoleEnum = z.enum(['owner', 'admin', 'viewer', 'member', 'disabled', 'pending']);
+const TranscodeDecisionEnum = z.enum(['directplay', 'copy', 'transcode']);
+
+// ============================================================================
+// Shared Primitives
 // ============================================================================
 
 const ServerIdParam = z.uuid().openapi({
-  description: 'UUID of a media server',
+  description: 'Media server UUID',
   example: '550e8400-e29b-41d4-a716-446655440000',
+});
+
+const PaginationQuery = z.object({
+  page: z.coerce.number().int().positive().default(1).openapi({ example: 1 }),
+  pageSize: z.coerce.number().int().positive().max(100).default(25).openapi({ example: 25 }),
 });
 
 const PaginationMeta = z
   .object({
-    total: z.number().int().openapi({ description: 'Total number of items', example: 42 }),
-    page: z.number().int().openapi({ description: 'Current page number', example: 1 }),
-    pageSize: z.number().int().openapi({ description: 'Items per page', example: 25 }),
+    total: z.number().int().openapi({ example: 42 }),
+    page: z.number().int().openapi({ example: 1 }),
+    pageSize: z.number().int().openapi({ example: 25 }),
   })
   .openapi('PaginationMeta');
+
+// ============================================================================
+// Shared Component Schemas
+// ============================================================================
+
+const ServerInfo = z.object({
+  serverId: z.uuid(),
+  serverName: z.string().openapi({ example: 'Main Plex Server' }),
+});
+
+const UserInfo = z.object({
+  id: z.uuid(),
+  username: z.string().openapi({ example: 'john_doe' }),
+  thumbUrl: z.string().nullable().openapi({ description: 'Avatar path from media server' }),
+  avatarUrl: z.string().nullable().openapi({ description: 'Proxied avatar URL' }),
+});
+
+const MediaInfo = z.object({
+  mediaTitle: z.string().openapi({ example: 'Inception' }),
+  mediaType: MediaTypeEnum,
+  showTitle: z
+    .string()
+    .nullable()
+    .openapi({ description: 'Show name (episodes only)', example: 'Breaking Bad' }),
+  seasonNumber: z.number().int().nullable().openapi({ example: 5 }),
+  episodeNumber: z.number().int().nullable().openapi({ example: 16 }),
+  year: z.number().int().nullable().openapi({ example: 2010 }),
+  thumbPath: z.string().nullable().openapi({ description: 'Poster path' }),
+  posterUrl: z.string().nullable().openapi({ description: 'Proxied poster URL' }),
+});
+
+const DeviceInfo = z.object({
+  device: z.string().nullable().openapi({ example: 'Apple TV' }),
+  player: z.string().nullable().openapi({ example: 'Plex for Apple TV' }),
+  product: z.string().nullable().openapi({ example: 'Plex for Apple TV' }),
+  platform: z.string().nullable().openapi({ example: 'tvOS' }),
+});
+
+// ============================================================================
+// Stream Quality Schemas (shared between /streams and /history)
+// ============================================================================
+
+const SourceVideoDetails = z
+  .object({
+    bitrate: z.number().optional(),
+    framerate: z.string().optional().openapi({ example: '23.976' }),
+    dynamicRange: z.string().optional().openapi({ example: 'HDR10' }),
+    aspectRatio: z.number().optional().openapi({ example: 1.78 }),
+    profile: z.string().optional().openapi({ example: 'main 10' }),
+    level: z.string().optional().openapi({ example: '5.1' }),
+    colorSpace: z.string().optional().openapi({ example: 'bt2020nc' }),
+    colorDepth: z.number().optional().openapi({ example: 10 }),
+  })
+  .nullable()
+  .openapi('SourceVideoDetails');
+
+const SourceAudioDetails = z
+  .object({
+    bitrate: z.number().optional(),
+    channelLayout: z.string().optional().openapi({ example: '7.1' }),
+    language: z.string().optional().openapi({ example: 'eng' }),
+    sampleRate: z.number().optional().openapi({ example: 48000 }),
+  })
+  .nullable()
+  .openapi('SourceAudioDetails');
+
+const StreamVideoDetails = z
+  .object({
+    bitrate: z.number().optional(),
+    width: z.number().optional().openapi({ example: 1920 }),
+    height: z.number().optional().openapi({ example: 1080 }),
+    framerate: z.string().optional().openapi({ example: '23.976' }),
+    dynamicRange: z.string().optional().openapi({ example: 'SDR' }),
+  })
+  .nullable()
+  .openapi('StreamVideoDetails');
+
+const StreamAudioDetails = z
+  .object({
+    bitrate: z.number().optional(),
+    channels: z.number().optional().openapi({ example: 2 }),
+    language: z.string().optional().openapi({ example: 'eng' }),
+  })
+  .nullable()
+  .openapi('StreamAudioDetails');
+
+const TranscodeInfo = z
+  .object({
+    containerDecision: TranscodeDecisionEnum.optional(),
+    sourceContainer: z.string().optional().openapi({ example: 'mkv' }),
+    streamContainer: z.string().optional().openapi({ example: 'mpegts' }),
+    hwRequested: z.boolean().optional(),
+    hwDecoding: z.string().optional().openapi({ example: 'videotoolbox' }),
+    hwEncoding: z.string().optional().openapi({ example: 'videotoolbox' }),
+    speed: z
+      .number()
+      .optional()
+      .openapi({ description: 'Transcode speed multiplier', example: 2.5 }),
+    throttled: z.boolean().optional(),
+    reasons: z.array(z.string()).optional(),
+  })
+  .nullable()
+  .openapi('TranscodeInfo');
+
+const SubtitleInfo = z
+  .object({
+    decision: z.string().optional().openapi({ example: 'burn' }),
+    codec: z.string().optional().openapi({ example: 'srt' }),
+    language: z.string().optional().openapi({ example: 'eng' }),
+    forced: z.boolean().optional(),
+  })
+  .nullable()
+  .openapi('SubtitleInfo');
+
+const StreamDetails = z.object({
+  isTranscode: z.boolean().nullable(),
+  videoDecision: TranscodeDecisionEnum.nullable(),
+  audioDecision: TranscodeDecisionEnum.nullable(),
+  bitrate: z.number().int().nullable().openapi({ description: 'Bitrate in kbps', example: 20000 }),
+  sourceVideoCodec: z.string().nullable().openapi({ example: 'hevc' }),
+  sourceAudioCodec: z.string().nullable().openapi({ example: 'truehd' }),
+  sourceAudioChannels: z.number().int().nullable().openapi({ example: 8 }),
+  sourceVideoWidth: z.number().int().nullable().openapi({ example: 3840 }),
+  sourceVideoHeight: z.number().int().nullable().openapi({ example: 2160 }),
+  sourceVideoDetails: SourceVideoDetails,
+  sourceAudioDetails: SourceAudioDetails,
+  streamVideoCodec: z.string().nullable().openapi({ example: 'h264' }),
+  streamAudioCodec: z.string().nullable().openapi({ example: 'aac' }),
+  streamVideoDetails: StreamVideoDetails,
+  streamAudioDetails: StreamAudioDetails,
+  transcodeInfo: TranscodeInfo,
+  subtitleInfo: SubtitleInfo,
+});
+
+const DisplayValues = z.object({
+  resolution: z
+    .string()
+    .nullable()
+    .openapi({ description: '4K, 1080p, 720p, etc.', example: '4K' }),
+  sourceVideoCodecDisplay: z.string().nullable().openapi({ example: 'HEVC' }),
+  sourceAudioCodecDisplay: z.string().nullable().openapi({ example: 'TrueHD' }),
+  audioChannelsDisplay: z.string().nullable().openapi({ example: '7.1' }),
+  streamVideoCodecDisplay: z.string().nullable().openapi({ example: 'H.264' }),
+  streamAudioCodecDisplay: z.string().nullable().openapi({ example: 'AAC' }),
+});
 
 // ============================================================================
 // GET /health
@@ -54,7 +212,7 @@ const ServerStatus = z
   .object({
     id: z.uuid(),
     name: z.string().openapi({ example: 'Main Plex Server' }),
-    type: z.enum(['plex', 'jellyfin', 'emby']),
+    type: ServerTypeEnum,
     online: z.boolean(),
     activeStreams: z.number().int().openapi({ example: 3 }),
   })
@@ -72,12 +230,12 @@ registry.registerPath({
   method: 'get',
   path: '/api/v1/public/health',
   tags: ['Public API'],
-  summary: 'System health and server connectivity',
-  description: 'Returns system health status and connection state of all configured media servers.',
+  summary: 'Check server connectivity',
+  description: 'Returns connection status for all configured media servers.',
   security: [{ bearerAuth: [] }],
   responses: {
     200: {
-      description: 'Health status retrieved successfully',
+      description: 'Health check successful',
       content: { 'application/json': { schema: HealthResponse } },
     },
     401: { description: 'Invalid or missing API key' },
@@ -89,16 +247,13 @@ registry.registerPath({
 // ============================================================================
 
 const StatsQuery = z.object({
-  serverId: ServerIdParam.optional().openapi({ description: 'Filter to specific server' }),
+  serverId: ServerIdParam.optional().openapi({ description: 'Filter by server' }),
 });
 
 const StatsResponse = z
   .object({
-    activeStreams: z
-      .number()
-      .int()
-      .openapi({ description: 'Currently active playback sessions', example: 5 }),
-    totalUsers: z.number().int().openapi({ description: 'Total unique users', example: 24 }),
+    activeStreams: z.number().int().openapi({ example: 5 }),
+    totalUsers: z.number().int().openapi({ example: 24 }),
     totalSessions: z
       .number()
       .int()
@@ -115,13 +270,13 @@ registry.registerPath({
   method: 'get',
   path: '/api/v1/public/stats',
   tags: ['Public API'],
-  summary: 'Dashboard overview statistics',
-  description: 'Returns aggregate statistics. Optionally filter by server.',
+  summary: 'Dashboard statistics',
+  description: 'Aggregate counts for dashboard display. Optionally filter by server.',
   security: [{ bearerAuth: [] }],
   request: { query: StatsQuery },
   responses: {
     200: {
-      description: 'Statistics retrieved successfully',
+      description: 'Statistics retrieved',
       content: { 'application/json': { schema: StatsResponse } },
     },
     401: { description: 'Invalid or missing API key' },
@@ -133,10 +288,9 @@ registry.registerPath({
 // ============================================================================
 
 const StreamsQuery = z.object({
-  serverId: ServerIdParam.optional().openapi({ description: 'Filter to specific server' }),
+  serverId: ServerIdParam.optional().openapi({ description: 'Filter by server' }),
   summary: z.coerce.boolean().optional().openapi({
-    description:
-      'If true, returns only summary statistics (omits data array). Useful for lightweight dashboard polling.',
+    description: 'Return only summary (omit data array)',
     example: false,
   }),
 });
@@ -144,132 +298,55 @@ const StreamsQuery = z.object({
 const Stream = z
   .object({
     id: z.uuid(),
-    serverId: z.uuid(),
-    serverName: z.string().openapi({ example: 'Main Plex Server' }),
-    // User info
+    ...ServerInfo.shape,
+    // User
     username: z.string().openapi({ example: 'John Doe' }),
-    userThumb: z
-      .string()
-      .nullable()
-      .openapi({ description: 'User avatar path from media server', example: '/photo/abc123' }),
-    userAvatarUrl: z.string().nullable().openapi({
-      description: 'Proxied avatar URL (relative)',
-      example:
-        '/api/v1/images/proxy?server=550e8400-e29b-41d4-a716-446655440000&url=/photo/abc123&width=100&height=100&fallback=avatar',
-    }),
-    // Media info
-    mediaTitle: z.string().openapi({ example: 'Inception' }),
-    mediaType: z.enum(['movie', 'episode', 'track', 'live', 'photo', 'unknown']),
-    showTitle: z
-      .string()
-      .nullable()
-      .openapi({ description: 'Show name for episodes', example: 'Breaking Bad' }),
-    seasonNumber: z.number().int().nullable().openapi({ example: 5 }),
-    episodeNumber: z.number().int().nullable().openapi({ example: 16 }),
-    year: z.number().int().nullable().openapi({ example: 2010 }),
-    thumbPath: z
-      .string()
-      .nullable()
-      .openapi({ description: 'Media thumbnail path', example: '/library/metadata/12345/thumb' }),
-    posterUrl: z.string().nullable().openapi({
-      description: 'Proxied poster URL (relative)',
-      example:
-        '/api/v1/images/proxy?server=550e8400-e29b-41d4-a716-446655440000&url=/library/metadata/12345/thumb&width=300&height=450&fallback=poster',
-    }),
+    userThumb: z.string().nullable(),
+    userAvatarUrl: z.string().nullable(),
+    // Media
+    ...MediaInfo.shape,
     durationMs: z
       .number()
       .int()
       .nullable()
-      .openapi({ description: 'Total duration in milliseconds', example: 8880000 }),
-    // Playback state
-    state: z.enum(['playing', 'paused', 'stopped']),
-    progressMs: z
-      .number()
-      .int()
-      .openapi({ description: 'Playback position in milliseconds', example: 3600000 }),
+      .openapi({ description: 'Total media length', example: 8880000 }),
+    // Playback
+    state: PlaybackStateEnum,
+    progressMs: z.number().int().openapi({ example: 3600000 }),
     startedAt: z.iso.datetime(),
-    // Transcode info
-    isTranscode: z
-      .boolean()
-      .nullable()
-      .openapi({ description: 'Whether stream is being transcoded', example: false }),
-    videoDecision: z
-      .string()
-      .nullable()
-      .openapi({ description: 'Video transcode decision', example: 'directplay' }),
-    audioDecision: z
-      .string()
-      .nullable()
-      .openapi({ description: 'Audio transcode decision', example: 'transcode' }),
-    bitrate: z
-      .number()
-      .int()
-      .nullable()
-      .openapi({ description: 'Stream bitrate in kbps', example: 20000 }),
-    // Device info
-    device: z.string().nullable().openapi({ example: 'Apple TV' }),
-    player: z
-      .string()
-      .nullable()
-      .openapi({ description: 'Player/client name', example: 'Plex for Apple TV' }),
-    product: z
-      .string()
-      .nullable()
-      .openapi({ description: 'Client product name', example: 'Plex for Apple TV' }),
-    platform: z.string().nullable().openapi({ description: 'Platform/OS', example: 'tvOS' }),
+    // Stream quality
+    ...StreamDetails.shape,
+    ...DisplayValues.shape,
+    // Device
+    ...DeviceInfo.shape,
   })
   .openapi('Stream');
 
 const ServerStreamSummary = z
   .object({
-    serverId: z.uuid(),
-    serverName: z.string().openapi({ example: 'Main Plex Server' }),
+    ...ServerInfo.shape,
     total: z.number().int().openapi({ example: 3 }),
-    transcodes: z
-      .number()
-      .int()
-      .openapi({ description: 'Streams with video/audio transcoding', example: 1 }),
-    directStreams: z
-      .number()
-      .int()
-      .openapi({ description: 'Streams with container remuxing only', example: 1 }),
-    directPlays: z
-      .number()
-      .int()
-      .openapi({ description: 'Streams playing native format', example: 1 }),
-    totalBitrate: z
-      .string()
-      .openapi({ description: 'Total bandwidth for this server', example: '22.5 Mbps' }),
+    transcodes: z.number().int().openapi({ example: 1 }),
+    directStreams: z.number().int().openapi({ example: 1 }),
+    directPlays: z.number().int().openapi({ example: 1 }),
+    totalBitrate: z.string().openapi({ example: '22.5 Mbps' }),
   })
   .openapi('ServerStreamSummary');
 
 const StreamsSummary = z
   .object({
-    total: z.number().int().openapi({ description: 'Total active streams', example: 5 }),
-    transcodes: z
-      .number()
-      .int()
-      .openapi({ description: 'Streams with video/audio transcoding', example: 2 }),
-    directStreams: z
-      .number()
-      .int()
-      .openapi({ description: 'Streams with container remuxing only', example: 1 }),
-    directPlays: z
-      .number()
-      .int()
-      .openapi({ description: 'Streams playing native format', example: 2 }),
-    totalBitrate: z
-      .string()
-      .openapi({ description: 'Total bandwidth of all streams', example: '45.2 Mbps' }),
-    byServer: z.array(ServerStreamSummary).openapi({ description: 'Breakdown by server' }),
+    total: z.number().int().openapi({ example: 5 }),
+    transcodes: z.number().int().openapi({ example: 2 }),
+    directStreams: z.number().int().openapi({ example: 1 }),
+    directPlays: z.number().int().openapi({ example: 2 }),
+    totalBitrate: z.string().openapi({ example: '45.2 Mbps' }),
+    byServer: z.array(ServerStreamSummary),
   })
   .openapi('StreamsSummary');
 
 const StreamsResponse = z
   .object({
-    data: z
-      .array(Stream)
-      .openapi({ description: 'Array of active streams (omitted when summary=true)' }),
+    data: z.array(Stream),
     summary: StreamsSummary,
   })
   .openapi('StreamsResponse');
@@ -284,22 +361,15 @@ registry.registerPath({
   method: 'get',
   path: '/api/v1/public/streams',
   tags: ['Public API'],
-  summary: 'Currently active playback sessions',
-  description: `Returns all active streams with aggregated statistics.
-
-**Response modes:**
-- Default: Returns \`{ data: [...], summary: {...} }\`
-- With \`summary=true\`: Returns \`{ summary: {...} }\` only (lighter payload for dashboards)
-
-**Summary includes:**
-- Total stream counts and transcode breakdown
-- Per-server statistics with bandwidth
-- Formatted bitrate strings (e.g., "45.2 Mbps")`,
+  summary: 'Active playback sessions',
+  description:
+    'Real-time active streams with codec and quality details. ' +
+    'Use summary=true for lightweight dashboard polling (omits data array).',
   security: [{ bearerAuth: [] }],
   request: { query: StreamsQuery },
   responses: {
     200: {
-      description: 'Active streams retrieved successfully',
+      description: 'Active streams retrieved',
       content: {
         'application/json': {
           schema: z.union([StreamsResponse, StreamsSummaryOnlyResponse]),
@@ -314,10 +384,8 @@ registry.registerPath({
 // GET /users
 // ============================================================================
 
-const UsersQuery = z.object({
-  page: z.coerce.number().int().positive().default(1).openapi({ example: 1 }),
-  pageSize: z.coerce.number().int().positive().max(100).default(25).openapi({ example: 25 }),
-  serverId: ServerIdParam.optional().openapi({ description: 'Filter to specific server' }),
+const UsersQuery = PaginationQuery.extend({
+  serverId: ServerIdParam.optional().openapi({ description: 'Filter by server' }),
 });
 
 const User = z
@@ -325,20 +393,12 @@ const User = z
     id: z.uuid(),
     username: z.string().openapi({ example: 'john_doe' }),
     displayName: z.string().openapi({ example: 'John Doe' }),
-    thumbUrl: z
-      .string()
-      .nullable()
-      .openapi({ description: 'User avatar path from media server', example: '/photo/abc123' }),
-    avatarUrl: z.string().nullable().openapi({
-      description: 'Proxied avatar URL (relative)',
-      example:
-        '/api/v1/images/proxy?server=550e8400-e29b-41d4-a716-446655440000&url=/photo/abc123&width=100&height=100&fallback=avatar',
-    }),
-    role: z.enum(['owner', 'admin', 'viewer', 'member', 'disabled', 'pending']),
-    trustScore: z.number().int().openapi({ description: '0-100 trust score', example: 95 }),
+    thumbUrl: z.string().nullable(),
+    avatarUrl: z.string().nullable(),
+    role: UserRoleEnum,
+    trustScore: z.number().int().openapi({ description: '0-100', example: 95 }),
     totalViolations: z.number().int().openapi({ example: 2 }),
-    serverId: z.uuid(),
-    serverName: z.string(),
+    ...ServerInfo.shape,
     lastActivityAt: z.iso.datetime().nullable(),
     sessionCount: z.number().int().openapi({ example: 147 }),
     createdAt: z.iso.datetime(),
@@ -356,14 +416,14 @@ registry.registerPath({
   method: 'get',
   path: '/api/v1/public/users',
   tags: ['Public API'],
-  summary: 'User list with activity summary',
+  summary: 'User list with activity metrics',
   description:
-    'Returns paginated list of users with activity metrics. Optionally filter by server.',
+    'Paginated users with session counts and trust scores. Users with accounts on multiple servers appear once per server.',
   security: [{ bearerAuth: [] }],
   request: { query: UsersQuery },
   responses: {
     200: {
-      description: 'Users retrieved successfully',
+      description: 'Users retrieved',
       content: { 'application/json': { schema: UsersResponse } },
     },
     401: { description: 'Invalid or missing API key' },
@@ -374,43 +434,28 @@ registry.registerPath({
 // GET /violations
 // ============================================================================
 
-const ViolationsQuery = z.object({
-  page: z.coerce.number().int().positive().default(1).openapi({ example: 1 }),
-  pageSize: z.coerce.number().int().positive().max(100).default(25).openapi({ example: 25 }),
-  serverId: ServerIdParam.optional().openapi({ description: 'Filter to specific server' }),
-  severity: z
-    .enum(['low', 'warning', 'high'])
-    .optional()
-    .openapi({ description: 'Filter by severity' }),
-  acknowledged: z.coerce
-    .boolean()
-    .optional()
-    .openapi({ description: 'Filter by acknowledged status' }),
+const ViolationsQuery = PaginationQuery.extend({
+  serverId: ServerIdParam.optional().openapi({ description: 'Filter by server' }),
+  severity: SeverityEnum.optional(),
+  acknowledged: z.coerce.boolean().optional(),
 });
 
 const Violation = z
   .object({
     id: z.uuid(),
-    serverId: z.uuid(),
-    serverName: z.string(),
-    severity: z.enum(['low', 'warning', 'high']),
+    ...ServerInfo.shape,
+    severity: SeverityEnum,
     acknowledged: z.boolean(),
-    data: z.record(z.string(), z.unknown()).openapi({ description: 'Violation-specific data' }),
+    data: z
+      .record(z.string(), z.unknown())
+      .openapi({ description: 'Rule-specific violation data' }),
     createdAt: z.iso.datetime(),
     rule: z.object({
       id: z.uuid(),
       type: z.string().openapi({ example: 'concurrent_streams' }),
       name: z.string().openapi({ example: 'Max 2 concurrent streams' }),
     }),
-    user: z.object({
-      id: z.uuid(),
-      username: z.string(),
-      thumbUrl: z
-        .string()
-        .nullable()
-        .openapi({ description: 'User avatar path from media server' }),
-      avatarUrl: z.string().nullable().openapi({ description: 'Proxied avatar URL (relative)' }),
-    }),
+    user: UserInfo,
   })
   .openapi('Violation');
 
@@ -425,14 +470,14 @@ registry.registerPath({
   method: 'get',
   path: '/api/v1/public/violations',
   tags: ['Public API'],
-  summary: 'Violations list with filtering',
+  summary: 'Rule violations',
   description:
-    'Returns paginated rule violations. Filter by server, severity, or acknowledged status.',
+    'Paginated violations in descending order. Filter by server, severity, or acknowledged status.',
   security: [{ bearerAuth: [] }],
   request: { query: ViolationsQuery },
   responses: {
     200: {
-      description: 'Violations retrieved successfully',
+      description: 'Violations retrieved',
       content: { 'application/json': { schema: ViolationsResponse } },
     },
     401: { description: 'Invalid or missing API key' },
@@ -443,35 +488,18 @@ registry.registerPath({
 // GET /history
 // ============================================================================
 
-const HistoryQuery = z.object({
-  page: z.coerce.number().int().positive().default(1).openapi({ example: 1 }),
-  pageSize: z.coerce.number().int().positive().max(100).default(25).openapi({ example: 25 }),
-  serverId: ServerIdParam.optional().openapi({ description: 'Filter to specific server' }),
-  state: z
-    .enum(['playing', 'paused', 'stopped'])
-    .optional()
-    .openapi({ description: 'Filter by playback state' }),
-  mediaType: z
-    .enum(['movie', 'episode', 'track', 'live', 'photo', 'unknown'])
-    .optional()
-    .openapi({ description: 'Filter by media type' }),
-  startDate: z.coerce
-    .date()
-    .optional()
-    .openapi({
-      description:
-        'Filter sessions starting on or after this date. Interpreted as start of day in the specified timezone.',
-    }),
-  endDate: z.coerce
-    .date()
-    .optional()
-    .openapi({
-      description:
-        'Filter sessions starting on or before this date. Interpreted as end of day in the specified timezone.',
-    }),
+const HistoryQuery = PaginationQuery.extend({
+  serverId: ServerIdParam.optional().openapi({ description: 'Filter by server' }),
+  state: PlaybackStateEnum.optional(),
+  mediaType: MediaTypeEnum.optional(),
+  startDate: z.coerce.date().optional().openapi({
+    description: 'Sessions on or after this date (start of day in timezone)',
+  }),
+  endDate: z.coerce.date().optional().openapi({
+    description: 'Sessions on or before this date (end of day in timezone)',
+  }),
   timezone: z.string().default('UTC').openapi({
-    description:
-      'IANA timezone identifier for date interpretation (e.g., America/New_York, Europe/London). Defaults to UTC.',
+    description: 'IANA timezone for date interpretation',
     example: 'America/New_York',
   }),
 });
@@ -479,75 +507,27 @@ const HistoryQuery = z.object({
 const SessionHistory = z
   .object({
     id: z.uuid(),
-    serverId: z.uuid(),
-    serverName: z.string(),
-    state: z.enum(['playing', 'paused', 'stopped']),
-    mediaType: z.enum(['movie', 'episode', 'track', 'live', 'photo', 'unknown']),
-    mediaTitle: z.string().openapi({ example: 'Inception' }),
-    showTitle: z
-      .string()
-      .nullable()
-      .openapi({ description: 'Show name for episodes', example: 'Breaking Bad' }),
-    seasonNumber: z.number().int().nullable().openapi({ example: 5 }),
-    episodeNumber: z.number().int().nullable().openapi({ example: 16 }),
-    year: z.number().int().nullable().openapi({ example: 2010 }),
-    thumbPath: z
-      .string()
-      .nullable()
-      .openapi({ description: 'Media thumbnail path', example: '/library/metadata/12345/thumb' }),
-    posterUrl: z.string().nullable().openapi({ description: 'Proxied poster URL (relative)' }),
+    ...ServerInfo.shape,
+    state: PlaybackStateEnum,
+    ...MediaInfo.shape,
     durationMs: z
       .number()
       .int()
       .nullable()
-      .openapi({ description: 'Total watch duration in ms (aggregated across segments)' }),
-    progressMs: z.number().int().nullable().openapi({ description: 'Playback position in ms' }),
-    totalDurationMs: z
-      .number()
-      .int()
-      .nullable()
-      .openapi({ description: 'Total media length in ms' }),
+      .openapi({ description: 'Total watch time across segments' }),
+    progressMs: z.number().int().nullable(),
+    totalDurationMs: z.number().int().nullable().openapi({ description: 'Media length' }),
     startedAt: z.iso.datetime(),
     stoppedAt: z.iso.datetime().nullable(),
-    watched: z.boolean().openapi({ description: 'True if user watched 85%+ of content' }),
+    watched: z.boolean().openapi({ description: 'True if watched 85%+' }),
     segmentCount: z
       .number()
       .int()
-      .openapi({ description: 'Number of pause/resume segments in this play', example: 1 }),
-    device: z.string().nullable(),
-    player: z.string().nullable(),
-    product: z
-      .string()
-      .nullable()
-      .openapi({ description: 'Client product name', example: 'Plex for iOS' }),
-    platform: z.string().nullable().openapi({ description: 'Platform/OS', example: 'iOS' }),
-    // Transcode info
-    isTranscode: z
-      .boolean()
-      .nullable()
-      .openapi({ description: 'Whether stream was transcoded', example: false }),
-    videoDecision: z
-      .string()
-      .nullable()
-      .openapi({ description: 'Video transcode decision', example: 'directplay' }),
-    audioDecision: z
-      .string()
-      .nullable()
-      .openapi({ description: 'Audio transcode decision', example: 'transcode' }),
-    bitrate: z
-      .number()
-      .int()
-      .nullable()
-      .openapi({ description: 'Stream bitrate in kbps', example: 20000 }),
-    user: z.object({
-      id: z.uuid(),
-      username: z.string(),
-      thumbUrl: z
-        .string()
-        .nullable()
-        .openapi({ description: 'User avatar path from media server' }),
-      avatarUrl: z.string().nullable().openapi({ description: 'Proxied avatar URL (relative)' }),
-    }),
+      .openapi({ description: 'Pause/resume segment count', example: 1 }),
+    ...DeviceInfo.shape,
+    ...StreamDetails.shape,
+    ...DisplayValues.shape,
+    user: UserInfo,
   })
   .openapi('SessionHistory');
 
@@ -562,28 +542,15 @@ registry.registerPath({
   method: 'get',
   path: '/api/v1/public/history',
   tags: ['Public API'],
-  summary: 'Session history with filtering',
-  description: `Returns paginated session history grouped by unique "plays".
-
-**Session Grouping:**
-Multiple pause/resume cycles for the same content are aggregated into a single entry with:
-- Combined \`durationMs\` (total watch time across segments)
-- First segment's \`startedAt\` time
-- Last segment's \`stoppedAt\` time
-- \`segmentCount\` indicating how many pause/resume cycles occurred
-
-This matches the behavior shown in the Tracearr Web UI history page.
-
-**Timezone Support:**
-Use the \`timezone\` parameter (IANA format like \`America/New_York\`) to control how \`startDate\` and \`endDate\` are interpreted. Dates are converted to start/end of day in the specified timezone. Defaults to UTC.
-
-**Filtering:**
-Filter by server, state, media type, or date range.`,
+  summary: 'Session history',
+  description:
+    'Paginated session history grouped by unique plays. ' +
+    'Multiple pause/resume cycles are aggregated into a single entry with combined duration and segment count.',
   security: [{ bearerAuth: [] }],
   request: { query: HistoryQuery },
   responses: {
     200: {
-      description: 'History retrieved successfully',
+      description: 'History retrieved',
       content: { 'application/json': { schema: HistoryResponse } },
     },
     401: { description: 'Invalid or missing API key' },
@@ -600,10 +567,10 @@ export function generateOpenAPIDocument(): unknown {
   return generator.generateDocument({
     openapi: '3.0.0',
     info: {
-      title: 'Tracearr API',
+      title: 'Tracearr Public API',
       version: '1.0.0',
       description: `
-External API for third-party integrations (Homarr, Home Assistant, etc.).
+External API for third-party integrations.
 
 ## Authentication
 
@@ -613,7 +580,7 @@ All endpoints require Bearer token authentication:
 Authorization: Bearer trr_pub_<your_token>
 \`\`\`
 
-Generate your API key in **Settings > General** within the Tracearr UI.
+Generate your API key in **Settings > General**.
 
 ## Pagination
 
@@ -621,7 +588,7 @@ Paginated endpoints support \`page\` (1-indexed) and \`pageSize\` (max 100, defa
 
 ## Filtering
 
-Most endpoints support \`serverId\` to filter results to a specific media server.
+Most endpoints support \`serverId\` to filter by media server.
       `.trim(),
       contact: {
         name: 'Tracearr',
