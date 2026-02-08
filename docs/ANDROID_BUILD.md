@@ -37,12 +37,15 @@ The app is linked to the **original** Tracearr Expo project. Your `EXPO_TOKEN` c
 5. Copy the **Project ID** (e.g. `a1b2c3d4-e5f6-7890-abcd-ef1234567890`).
 6. Add it to GitHub:
    - **Settings** → **Secrets and variables** → **Actions**
-   - **New repository secret**
-   - Name: `EAS_PROJECT_ID`
-   - Value: paste the Project ID
-   - **Add secret**
+   - **New repository secret** → Name: `EAS_PROJECT_ID`, Value: the Project ID
 
-If you omit this, the workflow uses the upstream project and will fail unless you have access to it.
+7. Add your **Expo username** (same account that owns the project):
+   - In Expo, your username is in the URL: `https://expo.dev/@your-username` or in the top-right profile.
+   - **New repository secret** → Name: `EAS_OWNER`, Value: your Expo username (e.g. `milindpatel63`). No `@` symbol.
+
+The build checks that the app’s `owner` matches the project owner; `EAS_OWNER` sets that when using your own project.
+
+If you omit these, the workflow uses the upstream project and will fail unless you have access to it.
 
 ### 3. GOOGLE_MAPS_API_KEY (Optional)
 

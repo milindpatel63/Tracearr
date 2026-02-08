@@ -8,9 +8,10 @@
    - Get it from: https://expo.dev/accounts/[your-account]/settings/access-tokens
    - Add to GitHub: `Settings` → `Secrets and variables` → `Actions` → `New repository secret`
 
-2. **EAS_PROJECT_ID** (Required for your fork)
-   - Create a project at https://expo.dev → copy its **Project ID**
-   - Add as secret `EAS_PROJECT_ID` (same place as above). Without this you get "Entity not authorized".
+2. **EAS_PROJECT_ID** and **EAS_OWNER** (Required for your fork)
+   - Create a project at https://expo.dev → copy its **Project ID** → secret `EAS_PROJECT_ID`
+   - Your Expo username (e.g. `milindpatel63`, no `@`) → secret `EAS_OWNER`
+   - Without both you get "Entity not authorized" or "owner does not match".
 
 3. **GOOGLE_MAPS_API_KEY** (Optional - only if you want maps)
    - Enable **"Maps SDK for Android"** in Google Cloud Console

@@ -26,10 +26,13 @@ module.exports = ({ config }) => {
     },
   };
 
-  // Override EAS project and updates URL when building with your own project
+  // Override EAS project, owner, and updates URL when building with your own project
   if (projectId) {
     merged.extra = { ...merged.extra, eas: { ...merged.extra?.eas, projectId } };
     merged.updates = { ...merged.updates, url: `https://u.expo.dev/${projectId}` };
+    if (process.env.EAS_OWNER) {
+      merged.owner = process.env.EAS_OWNER;
+    }
   }
 
   return merged;

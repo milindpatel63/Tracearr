@@ -78,6 +78,16 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
+      - name: Validate fork secrets
+        run: |
+          if [ -n "${{ secrets.EAS_PROJECT_ID }}" ]; then
+            if [ -z "${{ secrets.EAS_OWNER }}" ]; then
+              echo "::error::EAS_OWNER secret is required when using your own project. Set it to your Expo username (e.g. milindpatel63)."
+              exit 1
+            fi
+            echo "Using your EAS project and owner."
+          fi
+
       - name: Set build version
         run: |
           # Get current version from app.json
@@ -101,6 +111,7 @@ jobs:
         env:
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY || '' }}
           EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+          EAS_OWNER: ${{ secrets.EAS_OWNER }}
         run: |
           # Determine output file based on profile
           if [ "${{ inputs.profile }}" == "preview-apk" ] || [ "${{ inputs.profile }}" == "development" ]; then
