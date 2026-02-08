@@ -160,9 +160,16 @@ jobs:
           echo "Local credentials configured at $(pwd)/credentials.json"
           echo "Keystore location: $(pwd)/$KEYSTORE_PATH"
           
-          # Also temporarily set eas.json to use local version source
-          cp eas.json eas.json.backup 2>/dev/null || true
-          jq '.cli.appVersionSource = "local"' eas.json > eas.json.tmp && mv eas.json.tmp eas.json || true
+          # CRITICAL: Set credentialsSource to "local" in eas.json so EAS uses credentials.json
+          # Without this, EAS defaults to "remote" and ignores our file (then fails in non-interactive)
+          cp eas.json eas.json.backup
+          jq '
+            .cli.appVersionSource = "local" |
+            .build["preview-apk"].credentialsSource = "local" |
+            .build["preview"].credentialsSource = "local" |
+            .build["development"].credentialsSource = "local"
+          ' eas.json > eas.json.tmp && mv eas.json.tmp eas.json
+          echo "eas.json updated: credentialsSource=local for Android profiles"
 
       - name: Build Android APK
         id: build
