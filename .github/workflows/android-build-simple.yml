@@ -106,6 +106,23 @@ jobs:
           
           echo "Updated versionCode to $NEW_VERSION_CODE"
 
+      - name: Configure EAS for local build
+        env:
+          EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+          EAS_OWNER: ${{ secrets.EAS_OWNER }}
+        run: |
+          # Temporarily override eas.json to use local version source
+          # This prevents EAS from trying to use remote credentials/version management
+          echo "Configuring EAS for local build..."
+          
+          # Backup original eas.json
+          cp eas.json eas.json.backup
+          
+          # Modify to use local version source (avoids remote credential checks)
+          jq '.cli.appVersionSource = "local"' eas.json > eas.json.tmp && mv eas.json.tmp eas.json
+          
+          echo "EAS configured for local build"
+
       - name: Build Android APK
         id: build
         env:
@@ -127,7 +144,7 @@ jobs:
           echo "Building Android $OUTPUT_EXT for profile: ${{ inputs.profile }}"
           echo "Output file: $OUTPUT_FILE"
           
-          # Build with EAS
+          # Build with EAS (local version source configured above)
           eas build \
             --platform android \
             --profile ${{ inputs.profile }} \
@@ -137,6 +154,14 @@ jobs:
           
           echo "artifact-path=apps/mobile/${OUTPUT_FILE}" >> $GITHUB_OUTPUT
           echo "Build complete: ${OUTPUT_FILE}"
+
+      - name: Restore eas.json
+        if: always()
+        run: |
+          # Restore original eas.json if it was modified
+          if [ -f eas.json.backup ]; then
+            mv eas.json.backup eas.json
+          fi
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v6
