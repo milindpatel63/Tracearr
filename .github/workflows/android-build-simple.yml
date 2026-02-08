@@ -106,22 +106,63 @@ jobs:
           
           echo "Updated versionCode to $NEW_VERSION_CODE"
 
-      - name: Configure EAS for local build
+      - name: Generate local Android credentials
         env:
           EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
           EAS_OWNER: ${{ secrets.EAS_OWNER }}
         run: |
-          # Temporarily override eas.json to use local version source
-          # This prevents EAS from trying to use remote credentials/version management
-          echo "Configuring EAS for local build..."
+          # Generate a local keystore and credentials.json to avoid remote credential checks
+          echo "Setting up local Android credentials..."
           
-          # Backup original eas.json
-          cp eas.json eas.json.backup
+          KEYSTORE_PATH="./android-release.keystore"
+          KEYSTORE_PASSWORD="$(openssl rand -base64 32)"
+          KEY_ALIAS="release-key"
+          KEY_PASSWORD="$(openssl rand -base64 32)"
           
-          # Modify to use local version source (avoids remote credential checks)
-          jq '.cli.appVersionSource = "local"' eas.json > eas.json.tmp && mv eas.json.tmp eas.json
+          # Generate keystore if it doesn't exist
+          if [ ! -f "$KEYSTORE_PATH" ]; then
+            echo "Generating new Android keystore..."
+            keytool -genkeypair \
+              -v \
+              -storetype JKS \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass "$KEYSTORE_PASSWORD" \
+              -keypass "$KEY_PASSWORD" \
+              -alias "$KEY_ALIAS" \
+              -keystore "$KEYSTORE_PATH" \
+              -dname "CN=Tracearr Android,OU=Mobile,O=Tracearr,L=Unknown,S=Unknown,C=US"
+          else
+            echo "Using existing keystore"
+            # Read passwords from existing credentials.json if it exists
+            if [ -f "credentials.json" ]; then
+              KEYSTORE_PASSWORD=$(jq -r '.android.keystore.keystorePassword' credentials.json)
+              KEY_PASSWORD=$(jq -r '.android.keystore.keyPassword' credentials.json)
+            fi
+          fi
           
-          echo "EAS configured for local build"
+          # Create credentials.json in project root for EAS to use local credentials
+          # EAS reads this file to avoid remote credential checks
+          cat > credentials.json <<EOF
+          {
+            "android": {
+              "keystore": {
+                "keystorePath": "$KEYSTORE_PATH",
+                "keystorePassword": "$KEYSTORE_PASSWORD",
+                "keyAlias": "$KEY_ALIAS",
+                "keyPassword": "$KEY_PASSWORD"
+              }
+            }
+          }
+          EOF
+          
+          echo "Local credentials configured at $(pwd)/credentials.json"
+          echo "Keystore location: $(pwd)/$KEYSTORE_PATH"
+          
+          # Also temporarily set eas.json to use local version source
+          cp eas.json eas.json.backup 2>/dev/null || true
+          jq '.cli.appVersionSource = "local"' eas.json > eas.json.tmp && mv eas.json.tmp eas.json || true
 
       - name: Build Android APK
         id: build
@@ -144,7 +185,15 @@ jobs:
           echo "Building Android $OUTPUT_EXT for profile: ${{ inputs.profile }}"
           echo "Output file: $OUTPUT_FILE"
           
-          # Build with EAS (local version source configured above)
+          # Verify credentials.json exists
+          if [ ! -f "credentials.json" ]; then
+            echo "::error::credentials.json not found!"
+            exit 1
+          fi
+          
+          # Build with EAS using local credentials
+          # The credentials.json file tells EAS to use local keystore instead of remote
+          echo "Starting EAS build with local credentials..."
           eas build \
             --platform android \
             --profile ${{ inputs.profile }} \
@@ -155,13 +204,15 @@ jobs:
           echo "artifact-path=apps/mobile/${OUTPUT_FILE}" >> $GITHUB_OUTPUT
           echo "Build complete: ${OUTPUT_FILE}"
 
-      - name: Restore eas.json
+      - name: Cleanup
         if: always()
         run: |
           # Restore original eas.json if it was modified
           if [ -f eas.json.backup ]; then
             mv eas.json.backup eas.json
           fi
+          # Remove credentials.json (contains sensitive data)
+          rm -f credentials.json
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v6
